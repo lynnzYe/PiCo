@@ -8,3 +8,6 @@ I intend to focus on "piano", the instrument I love the most. My vision is to cr
 I feel the music I want in my mind. Is there any better way to get it out, other than 40 hours of practicing everyday?
 
 Can technology and machine learning be the wings of human imagination and expressivity?
+
+## Notice:
+I am looking for eager collaborators! Please contact me if you are interested!
