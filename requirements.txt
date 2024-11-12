@@ -1,0 +1,4 @@
+music21
+mido
+pyfluidsynth
+python-rtmidi
