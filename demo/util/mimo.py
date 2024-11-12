@@ -6,8 +6,8 @@ from threading import Thread, Timer
 import time
 import copy
 
-from util.bmois_logger import logger
-import music.music_seq as music
+from demo.util.bmois_logger import logger
+import demo.music.music_seq as music
 
 sheet = music.schubert_142_3
 
@@ -206,19 +206,19 @@ class MiMo:
 
 def main():
     logger.info("MiMo Toy example")
-    mimo = MiMo()
-    # mimo.send_midi(NoteEvent(True, 60, 127))
-    # time.sleep(2)
-    # mimo.send_midi(NoteEvent(False, 60, 100))
-    # mimo.add_note_seq(sheet)
+    mimo = MiMo(mido.get_input_names()[0], mido.get_output_names()[-1])
     mimo.add_note_seq(sheet)
     mimo.start_realtime_capture()
+
+    mimo.send_midi(NoteEvent(True, 60, 127))
+    time.sleep(2)
+    mimo.send_midi(NoteEvent(False, 60, 100))
 
 
 if __name__ == '__main__':
     logger.set_level(logging.INFO)
-    logger.info(mido.get_output_names())
     logger.info(mido.get_input_names())
-    # main()
+    logger.info(mido.get_output_names())
+    main()
 
 # 'FluidSynth virtual port (63328)'
