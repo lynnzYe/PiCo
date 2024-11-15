@@ -1,4 +1,5 @@
 import logging
+import threading
 
 import mido
 from collections import deque
@@ -6,8 +7,10 @@ from threading import Thread, Timer
 import time
 import copy
 
-from demo.util.bmois_logger import logger
-import demo.music.music_seq as music
+from nbclient.exceptions import timeout_err_msg
+
+from pico.demo.util.bmois_logger import logger
+import pico.demo.music.music_seq as music
 
 sheet = music.schubert_142_3
 
@@ -120,32 +123,63 @@ class MiMo:
     MiMo: Midi in Midi out, or, Music in Music out
     """
     listening = False  # whether to start realtime midi monitoring/listening
-    noteseq: NoteDeque  # predetermined list of pitches
+    noteseq: 'NoteDeque'  # predetermined list of pitches
     callback = None
-    notebinder: NoteBinder
+    notebinder: 'NoteBinder'
 
     def __init__(self, input_port_name, output_port_name, history_size=1500, clean_intv=5):
-        # self.input_port = mido.open_input('A-Series Keyboard Keyboard')
         self.input_port = mido.open_input(input_port_name)
         self.output_port = mido.open_output(output_port_name)
         self.history = deque(maxlen=history_size)  # Adjust the size based on ticks and events per tick
         self.noteseq = NoteDeque()
         self.listening = True
+        self.running_event = threading.Event()  # Event to control thread termination
         self.notebinder = NoteBinder()
-        self.cleaner = Timer(clean_intv, self.clean_history)
-        self.cleaner.start()
-        # self.debug_timer = Timer(5, self.debug_queue)
-        # self.debug_timer.start()
+        self.clean_intv = clean_intv
+        self.cleaner = None
+        self.capture_thread = None
 
-    def pneno(self, m: mido.messages.messages.Message):
-        """
-        Play next note in noteseq (call only once with noteon-noteoff pairs)
-        :param m:
-        :return:
-        """
+    def __del__(self):
+        self.stop()
+
+    def stop(self):
+        # logger.info("Stopping MiMo...")
+        self.listening = False
+        self.running_event.clear()  # Signal the thread to stop
+
+        # Close the input port first to interrupt any blocking receive
+        if self.input_port is not None:
+            self.input_port.close()
+            logger.debug("MIDI input port closed.")
+            self.input_port = None
+
+        # Now wait for the capture thread to finish
+        if self.capture_thread and self.capture_thread.is_alive():
+            self.capture_thread.join(timeout=2.0)  # Add timeout to prevent hanging
+            if self.capture_thread.is_alive():
+                logger.warn("Capture thread didn't stop gracefully within timeout")
+            else:
+                logger.debug("Realtime capture stopped.")
+            self.capture_thread = None
+
+        # Stop the cleaner timer
+        if self.cleaner and self.cleaner.is_alive():
+            self.cleaner.cancel()
+            logger.debug("Cleaner timer stopped.")
+            self.cleaner = None
+
+        # Finally close the output port
+        if self.output_port is not None:
+            self.output_port.close()
+            logger.debug("MIDI output port closed.")
+            self.output_port = None
+
+    def pneno(self, m: mido.Message):
         if self.noteseq is None:
             return None
         pitch = 0
+        if self.noteseq.empty():
+            logger.warn("Empty note sequence. You have completed the performance. Well done.")
         if m.type == 'note_on' and m.velocity > 0:
             pitch = self.noteseq.pop()
             self.notebinder.add_event(m, pitch)
@@ -156,7 +190,7 @@ class MiMo:
             return None
         return NoteEvent(m.type == 'note_on', pitch, m.velocity)
 
-    def send_midi(self, note_event: NoteEvent):
+    def send_midi(self, note_event: 'NoteEvent'):
         if note_event:
             midi = mido.Message('note_on' if note_event.noteon else 'note_off',
                                 note=note_event.pitch,
@@ -173,35 +207,45 @@ class MiMo:
             self.send_midi(func(mevent))
 
     def listen(self):
-        for m in self.input_port:
-            logger.debug('listening:', m)
-            self.transform_and_play(self.pneno, m)
-            self.history.append((time.time(), m))
+        while self.running_event.is_set():  # Continue while event is set
+            if not self.listening or self.input_port is None:
+                break  # Exit the loop if listening is turned off
+            try:
+                for msg in self.input_port.iter_pending():
+                    if not self.running_event.is_set():
+                        break
+                    logger.debug('listening:', msg)
+                    self.transform_and_play(self.pneno, msg)
+                    self.history.append((time.time(), msg))
+                time.sleep(0.001)
+
+            except (EOFError, OSError) as e:
+                # Handle port closing or other IO errors
+                logger.debug(f"Port error during listen: {e}")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error in listen loop: {e}")
+                break
 
     def clean_history(self):
-        # Prune outdated events
-        self.add_note_seq(sheet)
         current_time = time.time()
         count = 0
         while self.history and current_time - self.history[0][0] > 5:
             self.history.popleft()
             count += 1
         logger.debug("+Cleaned", count)
-        self.cleaner = Timer(5, self.clean_history)
+        self.cleaner = Timer(self.clean_intv, self.clean_history)
         self.cleaner.start()
-
-    # def debug_queue(self):
-    #     logger.debug("+Hist len: ", len(self.history))
-    #     # Restart the timer for the next debug
-    #     self.debug_timer = Timer(5, self.debug_queue)
-    #     self.debug_timer.start()
 
     def start_realtime_capture(self):
         if self.listening:
-            capture_thread = Thread(target=self.listen, daemon=True)
-            capture_thread.start()
+            self.running_event.set()  # Set the event to start the thread
+            self.capture_thread = Thread(target=self.listen)
+            self.capture_thread.start()
+            self.cleaner = Timer(self.clean_intv, self.clean_history)
+            self.cleaner.start()
         else:
-            logger.warning("Mimo is not listening to you.")
+            logger.warn("MiMo is not listening to you.")
 
 
 def main():

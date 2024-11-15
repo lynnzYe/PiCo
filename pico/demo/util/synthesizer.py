@@ -1,4 +1,7 @@
 import fluidsynth
+import threading
+import time
+from pico.demo.util.bmois_logger import logger
 
 
 class Fluidx:
@@ -9,11 +12,17 @@ class Fluidx:
         self.fs.start()
 
         if sf_path is not None:
-            print("Loading soundfont:", sf_path)
-            self.load_sf(sf_path)
+            logger.debug("Loading soundfont:", sf_path)
+        self.load_sf(sf_path)
 
     def __del__(self):
-        self.fs.delete()
+        self.stop()
+
+    def stop(self):
+        if self.fs:
+            self.fs.delete()
+            self.fs = None
+            logger.debug("Fluidx synthesizer stopped and resources released.")
 
     def load_sf(self, sf_path):
         sfid = self.fs.sfload(sf_path)
@@ -21,6 +30,12 @@ class Fluidx:
 
     def noteon(self, chan, key, vel):
         return self.fs.noteon(chan, key, vel)
+
+    def noteoff(self, chan, key, vel):
+        return self.fs.noteoff(chan, key, vel)
+
+    def release_all(self, chan=0):
+        self.fs.all_notes_off(chan)
 
 
 def main():

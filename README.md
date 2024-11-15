@@ -2,9 +2,32 @@
 
 AKA: Piano Conductor
 
+## Installation
 
+```shell
+conda create -n pico python=3.11 -y
+conda activate pico
+pip install -r requirements.txt
+pip install -e .
+```
 
+## Proof-of-Concept Interactive Demo
 
+You will need a connected MIDI controller for this demo.
+
+```shell
+python pico/demo/main.py \
+  --sf_path=PATH_TO_SOUNDFONT
+```
+
+Press any key on the MIDI device. Your {onset, offset, and velocity} information will be applied to a predetermined note
+sequence one by one, synthesized using the provided soundfont.
+
+It is a proof of concept for Piano Conductor -> reconstruct a complete expressive performance from timing and dynamic
+information only, so that you can artfully play the piano anytime anywhere.
+
+The idea is similar to Max Matthews's sequential drum / radio baton, except that you can now play the notes on a
+MIDI keyboard to achieve more fine-grained control over the timing and dynamic.
 
 ## Background
 
