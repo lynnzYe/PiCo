@@ -24,17 +24,13 @@ def array_choice(hint, arr_len):
 def choose_midi_input():
     logger.info("Available MIDI input devices:")
     input_list = mido.get_input_names()
-    if len(input_list) == 0:
-        logger.warn("No MIDI input device found.")
-        return []
+    output_list = mido.get_output_names()
+    if len(input_list) == 0 or len(output_list) == 0:
+        raise RuntimeError("No MIDI input/output device found.")
+        return [], []
     for i, e in enumerate(input_list):
         print(i, ': ', e)
     input_choice = array_choice('Choose an input device.', len(input_list))
-
-    output_list = mido.get_output_names()
-    if len(output_list) == 0:
-        logger.warn("No MIDI output device found.")
-        return []
     for i, e in enumerate(output_list):
         print(i, ': ', e)
     output_choice = array_choice('Choose an input device.', len(output_list))
@@ -78,6 +74,8 @@ def main():
                     'replacing the drum sensor with MIDI keyboard input.'
     )
     # Adding arguments
+    logger.warn("Currently, demo are available only with predetermined array of pitches"
+                " (which can be modified and created in the music.py file.\nOnly --sf_path will be used.")
     parser.add_argument('--sf_path', type=str, required=False, help="Path to the sound font")
     parser.add_argument('--midi_path', type=str, required=False, help="Path to the MIDI file")
     args = parser.parse_args()
@@ -86,5 +84,5 @@ def main():
 
 
 if __name__ == '__main__':
-    test_main()
-    # main()
+    # test_main()
+    main()
