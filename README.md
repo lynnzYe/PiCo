@@ -86,16 +86,21 @@ I am looking for collaborators! If you are interested, please reach out to me!
 
 [1] Sageev Oore, Ian Simon, Sander Dieleman, Douglas Eck, and Karen Simonyan. 2020. This time with feeling: Learning
 expressive musical performance. Neural Computing and Applications 32, (2020), 955–967.
+
 [2] Akira Maezawa, Kazuhiko Yamamoto, and Takuya Fujishima. 2019. Rendering Music Performance With Interpretation
 Variations Using Conditional Variational RNN. In International Society for Music Information Retrieval Conference.
 Retrieved from https://api.semanticscholar.org/CorpusID:208334557
+
 [3] Seungyeon Rhyu, Sarah Kim, and Kyogu Lee. 2022. Sketching the Expression: Flexible Rendering of Expressive Piano
 Performance with Self-Supervised Learning. Retrieved from https://arxiv.org/abs/2208.14867
+
 [4] Jingjing Tang, Geraint Wiggins, and Gyorgy Fazekas. 2023. Reconstructing Human Expressiveness in Piano Performances
 with a Transformer Network. Retrieved from https://arxiv.org/abs/2306.06040
+
 [5] Ilya Borovik and Vladimir Viro. 2023. ScorePerformer: Expressive Piano Performance Rendering with Fine-Grained
 Control. In Proceedings of the 24th International Society for Music Information Retrieval Conference (ISMIR). Retrieved
 from https://archives.ismir.net/ismir2023/paper/000069.pdf
+
 [6] Huan Zhang, Shreyan Chowdhury, Carlos Eduardo Cancino-Chacón, Jinhua Liang, Simon Dixon, and Gerhard Widmer. 2024.
 DExter: Learning and Controlling Performance Expression with Diffusion Models. Retrieved
 from https://arxiv.org/abs/2406.14850
