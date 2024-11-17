@@ -4,13 +4,24 @@ Play Next Note Seq
 import mido
 import time
 
+import note_seq
+from anyio import current_time
+from dask.array import absolute
+from jams.eval import tempo
+from mir_eval.display import pitch
+
 
 class PnenoPitch:
-    def __init__(self, pitch, velocity, onset, offset):
+    def __init__(self, pitch, velocity, onset, offset, chnl=0):
         self.pitch = pitch
         self.velocity = velocity
         self.onset = onset
         self.offset = offset
+        self.chnl = chnl
+
+    def __repr__(self):
+        return (f"Note(onset={self.onset}, offset={self.offset}, pitch={self.pitch}, "
+                f"velocity={self.velocity}, channel={self.chnl})")
 
 
 class PnenoCluster:
@@ -27,18 +38,77 @@ class PnenoCluster:
 
 
 class PnenoSeq:
-    def __init__(self, pneno_seq: list[PnenoCluster] = None, bpm=60):
-        if pneno_seq is None:
-            pneno_seq = []
+    def __init__(self, cluster_seq: list[PnenoCluster] = None, bpm=60):
+        if cluster_seq is None:
+            cluster_seq = []
         self.bpm = bpm
-        self.seq = pneno_seq
+        self.seq = cluster_seq
 
         self.cursor = 0
 
-    def get_next_seq(self):
+    def append(self, pneno_cluster: PnenoCluster):
+        assert pneno_cluster is not None
+        self.seq.append(pneno_cluster)
+
+    def extend(self, pneno_seq: list[PnenoCluster]):
+        assert pneno_seq is not None
+        self.seq.extend(pneno_seq)
+
+    def reset_cursor(self):
+        self.cursor = 0
+
+    def clean(self):
+        self.reset_cursor()
+        self.seq = []
+        self.bpm = 60
+
+    def get_next_cluster(self):
         if self.cursor >= len(self.seq) - 1:
             return None
         return self.seq[self.cursor + 1]
+
+
+def extract_pneno_notes(midi: mido.MidiFile):
+    """
+    Link note on and note off to create a PnenoPitch object
+    :param midi:
+    :return:
+    """
+    # tqb = midi.ticks_per_beat
+    track_notes = []
+    tempo_changes = []
+    for tr in midi.tracks:
+        notes = []
+        tempo_chg = []
+        active_notes = {}
+        absolute_time = 0
+        for msg in tr:
+            absolute_time += msg.time
+            if msg.type == 'set_tempo':
+                tempo_chg.append(msg)
+            elif msg.type == 'note_on' and msg.velocity > 0:
+                key = (msg.note, msg.channel)
+                if key in active_notes:
+                    onset_time, velocity = active_notes.pop(key)
+                    notes.append(
+                        PnenoPitch(pitch=msg.note, velocity=msg.velocity, onset=onset_time, offset=absolute_time,
+                                   chnl=msg.channel))
+                active_notes[key] = (absolute_time, msg.velocity)
+            elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+                key = (msg.note, msg.channel)
+                if key in active_notes:
+                    onset_time, velocity = active_notes.pop(key)
+                    notes.append(
+                        PnenoPitch(pitch=msg.note, velocity=velocity, onset=onset_time, offset=absolute_time,
+                                   chnl=msg.channel))
+        # Close any remaining notes
+        for (pitch, channel), (onset_time, velocity) in active_notes.items():
+            notes.append(PnenoPitch(pitch=pitch, velocity=velocity, onset=onset_time, offset=absolute_time,
+                                    chnl=channel))
+        tempo_changes.append(tempo_chg)
+        track_notes.append(notes)
+
+    return track_notes, tempo_changes
 
 
 def parse_midi_track_tempo(track):
@@ -60,78 +130,69 @@ def create_pneno_seq(midi_path):
     midi = mido.MidiFile(midi_path)
     if len(midi.tracks) not in [2, 3]:
         raise ValueError("Currently MIDI file must have at least two tracks (melody and accompaniment)")
+    track_notes, tempo_changes = extract_pneno_notes(midi)
 
-    tempo = []
-    melody_noteon = []
-    melody_noteoff = []
-    acc_noteon = []
-    acc_noteoff = []
-
+    # tempo = tempo_changes[0]  # TODO @Bmois check for multiple tempo changes
     if len(midi.tracks) == 3:
-        tempo = parse_midi_track_tempo(midi.tracks[0])
-        melody_track = midi.tracks[1]
-        acc_track = midi.tracks[2]  # For aligned Pneno segments
+        melody_track = track_notes[1]
+        acc_track = track_notes[2]  # For aligned Pneno segments
     else:
-        melody_track = midi.tracks[0]
-        acc_track = midi.tracks[1]  # For aligned Pneno segments
-
-    # Convert to absolute time
-    for track in midi.tracks:
-        absolute_time = 0
-        for msg in track:
-            absolute_time += msg.time
-            msg.time = absolute_time
+        melody_track = track_notes[0]
+        acc_track = track_notes[1]
 
     melody_onsets = []
 
-    for msg in melody_track:
-        if msg.type == 'set_tempo':
-            tempo.append(msg.tempo)
-        elif msg.type == 'note_on' and msg.velocity > 0:  # Only consider note_on messages with non-zero velocity
-            melody_noteon.append(msg)
-            melody_onsets.append(msg.time)
-        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-            melody_noteoff.append(msg)
+    for note in melody_track:
+        melody_onsets.append(note.onset)
 
     acc_sequences = []  # List of lists to store sequences
-    current_sequence = []
-    onset_index = 0
+    current_acc_sequence = []
+    onset_index = 1
 
-    for msg in acc_track:
-        if msg.type == 'note_on' and msg.velocity > 0:
-            acc_noteon.append(msg)
-            # Append note to the current sequence if it's before the next melody onset
-            if onset_index < len(melody_onsets) and msg.time <= melody_onsets[onset_index]:
-                current_sequence.append(msg)
-            else:
-                # Append the current sequence and start a new one when we reach the next onset
-                acc_sequences.append(current_sequence)
-                current_sequence = [msg]
-                onset_index += 1
-                # Prevent out-of-bounds indexing for melody_onsets
-                if onset_index >= len(melody_onsets):
-                    break
+    for note in acc_track:
+        # Append note to the current sequence if it's before the next melody onset
+        if onset_index < len(melody_onsets) and note.onset < melody_onsets[onset_index]:
+            current_acc_sequence.append(note)
+        else:
+            # Append the current sequence and start a new one when we reach the next onset
+            acc_sequences.append(current_acc_sequence)
+            current_acc_sequence = [note]
+            onset_index += 1
+            # Prevent out-of-bounds indexing for melody_onsets
+            if onset_index >= len(melody_onsets):
+                break
 
-        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-            acc_noteoff.append(msg)
+    assert len(melody_track) == len(acc_sequences)
+    pneno_seq = PnenoSeq()
+    for i in range(len(melody_track)):
+        pneno_seq.append(PnenoCluster(key=melody_track[i], segment=acc_sequences[i]))
+    return pneno_seq
 
-    return melody_noteon, acc_noteon,
 
+def play_noteon_midi_seq(midi_seq, output_port_name, default_vel=80, chnl=0):
+    """
 
-def play_noteon_midi_seq(midi_seq, output_port_name, default_vel=80):
-    play_mid_seq = []
-    for m in midi_seq:
-        play_mid_seq.append(mido.Message('note_on', note=m.note, velocity=default_vel, time=m.time))
-        play_mid_seq.append(mido.Message('note_off', note=m.note, velocity=default_vel, time=10))
+    :param midi_seq: Array of MIDI events with absolute time.
+    :param output_port_name:
+    :param default_vel:
+    :return:
+    """
+    midi_seq.sort(key=lambda event: event.time)
     with mido.open_output(output_port_name) as output:
-        start_time = time.time()
-        for msg in play_mid_seq:
-            # Wait for the specified delta time
-            time.sleep(msg.time)
-            # Send the message to the output
+        last_time = midi_seq[0].time
+        for msg in midi_seq:
+            delay = (msg.time - last_time) / 500
+            time.sleep(delay)
+            msg.velocity = default_vel
+            msg.channel = chnl
             output.send(msg)
-            print(f"Sent: {msg} at {time.time() - start_time:.2f}s")
+            last_time = msg.time
 
 
 if __name__ == '__main__':
-    create_pneno_seq('/Users/kurono/Desktop/pneno_demo.mid')
+    print(mido.get_output_names())
+    melody, acc = create_pneno_seq('/Users/kurono/Desktop/pneno_demo.mid')
+
+    for i in range(len(acc)):
+        play_noteon_midi_seq(acc[i], output_port_name=mido.get_output_names()[0])
+        time.sleep(0.3)
