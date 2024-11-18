@@ -5,12 +5,10 @@ import mido
 from collections import deque
 from threading import Thread, Timer
 import time
-import copy
-
-from nbclient.exceptions import timeout_err_msg
 
 from pico.logger import logger
 import pico.demo.music.music_seq as music
+from pico.pneno.pneno_seq import is_note_on
 
 sheet = music.schubert_142_3
 
@@ -177,10 +175,9 @@ class MiMo:
     def pneno(self, m: mido.Message):
         if self.noteseq is None:
             return None
-        pitch = 0
         if self.noteseq.empty():
             logger.warn("Empty note sequence. You have completed the performance. Well done.")
-        if m.type == 'note_on' and m.velocity > 0:
+        if is_note_on(m):
             pitch = self.noteseq.pop()
             self.notebinder.add_event(m, pitch)
         else:

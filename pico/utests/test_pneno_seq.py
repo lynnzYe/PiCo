@@ -1,5 +1,5 @@
 import pytest
-from pico.Pneno import *
+from pico.pneno.pneno_seq import *
 
 
 @pytest.mark.parametrize("midi_list, num_notes", [

@@ -1,12 +1,14 @@
 """
 Play Next Note Seq
 """
+import copy
 from os import times
 
 import mido
 import time
 
 from dask.array import absolute
+from jams.eval import tempo
 
 from pico.logger import logger
 
@@ -61,20 +63,26 @@ def shift_midi_time(key_onset, events: list[mido.Message]):
 
 
 class PnenoSegment:
-    def __init__(self, key: PnenoPitch, segment: list[PnenoPitch]):
+    # TODO @Bmois: maybe PnenoSegment should also has tempo information, and PnenoSeq calls PnenoSegment.convert_ticks
+    def __init__(self, key: PnenoPitch, segment: list[PnenoPitch], onset=None):
         """
 
         :param key:
         :param segment: Pneno segment, starting from current key MIDI till the next key MIDI
         """
-        self.onset = key.onset
+        self.onset = key.onset if onset is None else onset
         self.key = key
-        self.key.offset -= self.onset
-        self.key.onset -= self.onset  # Always the first note in a segment
+        self.key.offset -= self.onset  # The sequence's time always starts from 0
+        self.key.onset -= self.onset  # ...
         self.sgmt = shift_segment_time(key_onset=self.onset, segment=segment)
 
+    def copy(self):
+        copied_key = copy.deepcopy(self.key)
+        copied_sgmt = copy.deepcopy(self.sgmt)
+        return PnenoSegment(copied_key, copied_sgmt, onset=self.onset)
+
     # def query(key): return False
-    def to_midi_seq(self, use_absolute_time=False):
+    def to_midi_seq(self, use_absolute_time=False, start_from_zero=False, include_key=True):
         """
         Convert list of PnenoNotes to Midi Messages
         :param use_absolute_time:
@@ -86,29 +94,42 @@ class PnenoSegment:
             2.  the absolute time of the last event in this sequence
          -
         """
-        events = self.key.to_midi_events()
+        if include_key:
+            events = self.key.to_midi_events()
+        else:
+            events = []
         for e in self.sgmt:
             events.extend(e.to_midi_events())
         events.sort(key=lambda event: event.time)
         if not use_absolute_time:
             convert_abs_to_delta_time(events)
             return events
-        for i in range(len(events)):
-            events[i].time += self.onset
+        if not start_from_zero:
+            for i in range(len(events)):
+                events[i].time += self.onset
         return events
 
 
 class PnenoSeq:
-    def __init__(self, segment_list: list[PnenoSegment] = None, bpm=60):
+    def __init__(self, segment_list: list[PnenoSegment] = None, ticks_per_beat=120, tempo=250000):
+        """
+        :param segment_list:
+        :param ticks_per_beat:
+        :param tempo:   250,000 for bpm=60
+        """
         if segment_list is None:
-            segment_list = []
-        self.bpm = bpm
-        self.seq = segment_list
-
+            self.seq = []
+        else:
+            self.seq = segment_list
+        self.tempo = tempo
+        self.ticks_per_beat = ticks_per_beat
         self.cursor = 0
 
     def __getitem__(self, index):
         return self.seq[index]
+
+    def empty(self):
+        return len(self.seq) == 0
 
     def append(self, pneno_sgmt: PnenoSegment):
         assert pneno_sgmt is not None
@@ -124,12 +145,13 @@ class PnenoSeq:
     def clean(self):
         self.reset_cursor()
         self.seq = []
-        self.bpm = 60
+        self.tempo = 250_000
 
     def get_next_sgmt(self):
         if self.cursor >= len(self.seq) - 1:
             return None
-        return self.seq[self.cursor + 1]
+        self.cursor += 1
+        return self.seq[self.cursor - 1]
 
     def to_midi_seq(self, use_absolute_time=False):
         events = []
@@ -142,10 +164,21 @@ class PnenoSeq:
             convert_abs_to_delta_time(events)
         return events
 
+    def ticks_to_seconds(self, ticks):
+        return (ticks * self.tempo) / (self.ticks_per_beat * 1_000_000)
+
+
+def is_note_on(m: mido.Message):
+    return m.type == 'note_on' and m.velocity > 0
+
+
+def is_note_off(m: mido.Message):
+    return m.type == 'note_off' or (m.type == 'note_on' and m.velocity == 0)
+
 
 def extract_pneno_notes_from_track(midi_track: mido.MidiTrack or list[mido.Message]):
     """
-
+    Build Note (with linked onset & offset info)
     :param midi_track:
     :return:
     """
@@ -158,7 +191,7 @@ def extract_pneno_notes_from_track(midi_track: mido.MidiTrack or list[mido.Messa
         absolute_time += msg.time
         if msg.type == 'set_tempo':
             tempo_chg.append(msg)
-        elif msg.type == 'note_on' and msg.velocity > 0:
+        elif is_note_on(msg):
             key = (msg.note, msg.channel)
             if key in active_notes:
                 onset_time, velocity = active_notes.pop(key)
@@ -166,7 +199,7 @@ def extract_pneno_notes_from_track(midi_track: mido.MidiTrack or list[mido.Messa
                     PnenoPitch(pitch=msg.note, velocity=msg.velocity, onset=onset_time, offset=absolute_time,
                                chnl=msg.channel))
             active_notes[key] = (absolute_time, msg.velocity)
-        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+        elif is_note_off(msg):
             key = (msg.note, msg.channel)
             if key in active_notes:
                 onset_time, velocity = active_notes.pop(key)
@@ -192,7 +225,7 @@ def extract_pneno_notes_from_midi(midi: mido.MidiFile):
     for tr in midi.tracks:
         notes, tempo_chgs = extract_pneno_notes_from_track(tr)
         track_notes.append(notes)
-        tempo_changes.append(tempo_chgs)
+        tempo_changes.extend(tempo_chgs)
 
     return track_notes, tempo_changes
 
@@ -225,10 +258,13 @@ def create_pneno_seq_from_midi(midi_path):
         melody_track = track_notes[0]
         acc_track = track_notes[1]
 
-    return create_pneno_seq(melody_track, acc_track)
+    if len(tempo_changes) > 1:
+        logger.warn("More than one tempo changes found!")
+
+    return create_pneno_seq(melody_track, acc_track, midi.ticks_per_beat, tempo_changes[0].tempo)
 
 
-def create_pneno_seq(melody_track, acc_track):
+def create_pneno_seq(melody_track, acc_track, ticks_per_beat, bpm):
     melody_track.sort(key=lambda e: e.onset)
     acc_track.sort(key=lambda e: e.onset)
     melody_onsets = []
@@ -258,10 +294,10 @@ def create_pneno_seq(melody_track, acc_track):
                 break
 
     assert len(melody_track) == len(acc_sequences)
-    pneno_seq = PnenoSeq()
+    seq = PnenoSeq(ticks_per_beat=ticks_per_beat, tempo=bpm)
     for i in range(len(melody_track)):
-        pneno_seq.append(PnenoSegment(key=melody_track[i], segment=acc_sequences[i]))
-    return pneno_seq
+        seq.append(PnenoSegment(key=melody_track[i], segment=acc_sequences[i]))
+    return seq
 
 
 def play_midi_seq(midi_seq, output_port_name, default_vel=80, chnl=0, absolute_time=False, tempo_scaling=400):
