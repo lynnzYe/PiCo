@@ -5,7 +5,7 @@ import mido
 import time
 
 from pico.demo.util.mimo import MiMo, NoteEvent
-from pico.demo.util.bmois_logger import logger
+from pico.logger import logger
 from pico.demo.util.synthesizer import Fluidx
 import pico.demo.music.music_seq as mur
 

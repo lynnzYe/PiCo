@@ -1,7 +1,7 @@
 import fluidsynth
 import threading
 import time
-from pico.demo.util.bmois_logger import logger
+from pico.logger import logger
 
 
 class Fluidx:
@@ -31,8 +31,8 @@ class Fluidx:
     def noteon(self, chan, key, vel):
         return self.fs.noteon(chan, key, vel)
 
-    def noteoff(self, chan, key, vel):
-        return self.fs.noteoff(chan, key, vel)
+    def noteoff(self, chan, key):
+        return self.fs.noteoff(chan, key)
 
     def release_all(self, chan=0):
         self.fs.all_notes_off(chan)
@@ -49,7 +49,14 @@ def main():
     fs.noteon(0, 60, 100)
     fs.noteon(0, 64, 100)
     fs.noteon(0, 67, 100)
-    input("End?")
+    time.sleep(1)
+    fs.noteoff(0, 60)
+    fs.noteoff(0, 64)
+    fs.noteoff(0, 67)
+
+    while True:
+        input("Release all current noteon?")
+        fs.release_all(0)
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ import copy
 
 from nbclient.exceptions import timeout_err_msg
 
-from pico.demo.util.bmois_logger import logger
+from pico.logger import logger
 import pico.demo.music.music_seq as music
 
 sheet = music.schubert_142_3
