@@ -1,4 +1,5 @@
 import logging
+import os.path
 import threading
 
 import mido
@@ -6,14 +7,13 @@ from collections import deque
 from threading import Thread, Timer
 import time
 import sched
-
-from jedi.debug import speed
-from joblib.testing import timeout
-from sympy.benchmarks.bench_meijerint import alpha
+import pickle
 
 from pico.logger import logger
+from pico.pneno.interpolator import DMYSpeedInterpolator, DMAVelocityInterpolator
 from pico.pneno.pneno_seq import PnenoSegment, PnenoSeq, is_note_on, is_note_off, create_pneno_seq_from_midi
 from pico.util.midi_util import choose_midi_input
+from pico.pico import PiCo
 
 scheduler = sched.scheduler(time.time, time.sleep)
 
@@ -49,6 +49,9 @@ class PnoSegBinder:
 
     def pop_by_midi(self, signal: mido.Message):
         if is_note_off(signal):
+            if signal.note not in self.binding.keys():
+                logger.warn("No Pneno Segment found for key", signal.note)
+                return None
             return self.binding.pop(signal.note)
         logger.warn("Cannot retrive PnenooSegment by note-on events")
         return None
@@ -66,34 +69,7 @@ class PnoSegBinder:
             logger.warn("Note-off events cannot serve as the key.")
 
 
-class DMYSpeedInterpolator:
-    def interpolate(self):
-        return 1.0
-
-
-class DMAVelocityInterpolator:
-    """Decaying Moving Average Interpolator"""
-
-    def __init__(self, alpha=0.5, decay=0.8):
-        self.alpha = alpha
-        self.decay = decay
-        self._past_vel = None
-
-    def interpolate(self, curr_vel):
-        if self._past_vel is None:
-            self._past_vel = curr_vel * self.decay
-            return int(self._past_vel)
-        else:
-            max_ret = self.decay * curr_vel
-            return int(
-                min(
-                    self.alpha * self.decay * self._past_vel + (1 - self.alpha) * min(max_ret, self._past_vel),
-                    max_ret
-                )
-            )
-
-
-class PnenoSystem:
+class PnenoSystem(PiCo):
     """
     The "play-next-note" system: captures real-time input signals and bind them with ordered PnenoSegments
     """
@@ -102,7 +78,7 @@ class PnenoSystem:
     seg_binder: PnoSegBinder
 
     def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5,
-                 speed_interpolator=None, velocity_interpolator=None):
+                 session_save_path=None, speed_interpolator=None, velocity_interpolator=None):
         """
 
         :param input_port_name:
@@ -110,6 +86,9 @@ class PnenoSystem:
         :param pno_seq:   predetermined orderedsequence of PnenoSegments. No async support.
         :param history_size:
         :param clean_intv:
+        :param session_save_path:  if provided (save folder), full performance will be saved as a pkl file
+        :param speed_interpolator:
+        :param velocity_interpolator
         """
         self.input_port = mido.open_input(input_port_name)
         self.output_port = mido.open_output(output_port_name)
@@ -122,7 +101,8 @@ class PnenoSystem:
         else:
             self.pno_seq = pno_seq
         self.seg_binder = PnoSegBinder()
-        self.history = deque(maxlen=history_size)  # Adjust the size based on ticks and events per tick
+        self.session_save_path = session_save_path
+        self.history = deque(maxlen=history_size if not self.session_save_path else None)
         self.clean_intv = clean_intv
 
         self.listening = True
@@ -134,17 +114,21 @@ class PnenoSystem:
     def __del__(self):
         self.stop()
 
+    def load_score(self, score):
+        assert type(score) == PnenoSeq
+        self.pno_seq = score
+
     def start_realtime_capture(self):
         if self.listening:
             self.running_event = threading.Event()  # Event to control thread termination
             self.capture_thread = threading.Thread(target=self.listen)
             self.midi_scheduler = threading.Thread(target=self.run_midi_scheduler)
-            self.cleaner = Timer(self.clean_intv, self.clean_history)
+            self.cleaner = Timer(self.clean_intv, self.clean_history) if not self.session_save_path else None
 
             self.running_event.set()  # Set the event to start the thread
             self.capture_thread.start()
             self.midi_scheduler.start()
-            self.cleaner.start()
+            self.cleaner.start() if not self.session_save_path else None
             logger.info("Pneno System started! Press any MIDI key to continue...")
         else:
             logger.warn("PnenoSystem is not listening to you.")
@@ -211,6 +195,19 @@ class PnenoSystem:
             logger.debug("MIDI output port closed.")
             self.output_port = None
 
+        # Export performance data if asked
+        if self.session_save_path:
+            save_path = f'{self.session_save_path}/perf_data.pkl'
+            fname_add = 0
+            if os.path.exists(f'{self.session_save_path}/perf_data.pkl'):
+                logger.warn("Existing performance data exist")
+                while os.path.exists(f'{self.session_save_path}/perf_data_{fname_add}.pkl'):
+                    fname_add += 1
+                save_path = f'{self.session_save_path}/perf_data_{fname_add}.pkl'
+            with open(save_path, 'wb') as f:
+                pickle.dump(self.history, f)
+                print('Performance history saved to:', save_path)
+
     def run_midi_scheduler(self):
         while self.listening:
             if scheduler.queue:
@@ -262,8 +259,8 @@ class PnenoSystem:
             if not self.seg_binder.noteon_status and self.pno_seq.is_end():
                 # Reached end of performance
                 logger.info("You have completed the performance. Bravo!")
-                self.listening = False
-                self.running_event.clear()
+                # self.listening = False
+                # self.running_event.clear()
                 logger.info("You may now exit by pressing [Enter]")
         if is_note_on(midi):
             # Apply input midi velocity to sgmt key
@@ -299,12 +296,12 @@ class PnenoSystem:
             self.history.popleft()
             count += 1
         logger.debug("+Cleaned", count, 'history')
-        self.cleaner = Timer(self.clean_intv, self.clean_history)
+        self.cleaner = Timer(self.clean_intv, self.clean_history)  # Restart timer
         self.cleaner.start()
 
 
-def main():
-    pneno_seq = create_pneno_seq_from_midi('/Users/kurono/Desktop/pneno_demo.mid')
+def start_interactive_session(midi_path):
+    pneno_seq = create_pneno_seq_from_midi(midi_path)
     inp, oup = choose_midi_input()
     pno = PnenoSystem(inp, oup, pno_seq=pneno_seq)
     pno.start_realtime_capture()
@@ -314,11 +311,16 @@ def main():
     pno.stop()
 
 
+def main():
+    midi_path = '/Users/kurono/Desktop/pneno_demo.mid'
+    start_interactive_session(midi_path)
+
+
 if __name__ == '__main__':
     logger.set_level(logging.DEBUG)
     main()
 
 # TODO @Bmois:
-#  1. solve same-note on off debug
+#  [done] 1. solve same-note on off debug
 #  2. real-time tempo estimation
 #  3. record performance data save as rehearsal data for tempo estimation

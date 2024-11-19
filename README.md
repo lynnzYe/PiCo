@@ -16,8 +16,9 @@ pip install -e .
 You will need a connected MIDI controller for this demo.
 
 ```shell
-python pico/demo/main.py \
+python pico/demo.py \
   --sf_path=PATH_TO_SOUNDFONT
+  --score_path=PATH_TO_MIDI_FILE # Only used in Mode 1
 ```
 
 Press any key on the MIDI device. Your {onset, offset, and velocity} information will be applied to a predetermined note

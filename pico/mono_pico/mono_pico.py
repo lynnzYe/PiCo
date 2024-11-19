@@ -7,8 +7,9 @@ from threading import Thread, Timer
 import time
 
 from pico.logger import logger
-import pico.demo.music.music_seq as music
+import pico.mono_pico.music.music_seq as music
 from pico.pneno.pneno_seq import is_note_on
+from pico.pico import PiCo
 
 sheet = music.schubert_142_3
 
@@ -116,9 +117,9 @@ class NoteBinder:
         return None
 
 
-class MiMo:
+class MonoPiCo(PiCo):
     """
-    MiMo: Midi in Midi out, or, Music in Music out
+    Piano Conductor for monophonic melody line (like a sequential drum)
     """
     listening = False  # whether to start realtime midi monitoring/listening
     noteseq: 'NoteDeque'  # predetermined list of pitches
@@ -141,7 +142,7 @@ class MiMo:
         self.stop()
 
     def stop(self):
-        # logger.info("Stopping MiMo...")
+        # logger.info("Stopping MonoPneno...")
         self.listening = False
         self.running_event.clear()  # Signal the thread to stop
 
@@ -172,11 +173,11 @@ class MiMo:
             logger.debug("MIDI output port closed.")
             self.output_port = None
 
-    def pneno(self, m: mido.Message):
+    def play_next_midi(self, m: mido.Message):
         if self.noteseq is None:
             return None
         if self.noteseq.empty():
-            logger.warn("Empty note sequence. You have completed the performance. Well done.")
+            logger.warn("Empty note sequence. You have completed the performance. Bravo!")
         if is_note_on(m):
             pitch = self.noteseq.pop()
             self.notebinder.add_event(m, pitch)
@@ -195,7 +196,7 @@ class MiMo:
             logger.debug("Sending:", midi)
             self.output_port.send(midi)
 
-    def add_note_seq(self, pitch_arr: list[int]):
+    def load_score(self, pitch_arr: list[int]):
         logger.info('Appended note list: ', pitch_arr)
         self.noteseq.append_list(pitch_arr)
 
@@ -212,7 +213,7 @@ class MiMo:
                     if not self.running_event.is_set():
                         break
                     logger.debug('listening:', msg)
-                    self.transform_and_play(self.pneno, msg)
+                    self.transform_and_play(self.play_next_midi, msg)
                     self.history.append((time.time(), msg))
                 time.sleep(0.001)
 
@@ -242,13 +243,13 @@ class MiMo:
             self.cleaner = Timer(self.clean_intv, self.clean_history)
             self.cleaner.start()
         else:
-            logger.warn("MiMo is not listening to you.")
+            logger.warn("MonoPneno is not listening to you.")
 
 
 def main():
-    logger.info("MiMo Toy example")
-    mimo = MiMo(mido.get_input_names()[0], mido.get_output_names()[-1])
-    mimo.add_note_seq(sheet)
+    logger.info("Monophonic PiCo Toy example")
+    mimo = MonoPiCo(mido.get_input_names()[0], mido.get_output_names()[-1])
+    mimo.load_score(sheet)
     mimo.start_realtime_capture()
 
     mimo.send_midi(NoteEvent(True, 60, 127))
