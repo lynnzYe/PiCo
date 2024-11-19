@@ -46,9 +46,9 @@ def main():
     soundfont_path = '../data/piano.sf2'
     fs = Fluidx(soundfont_path)
     # input("Start?")
-    fs.noteon(0, 60, 100)
-    fs.noteon(0, 64, 100)
-    fs.noteon(0, 67, 100)
+    fs.noteon(0, 60, 60)
+    fs.noteon(0, 64, 60)
+    fs.noteon(0, 67, 60)
     time.sleep(1)
     fs.noteoff(0, 60)
     fs.noteoff(0, 64)

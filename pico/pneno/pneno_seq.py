@@ -147,8 +147,11 @@ class PnenoSeq:
         self.seq = []
         self.tempo = 250_000
 
+    def is_end(self):
+        return self.cursor == len(self.seq)
+
     def get_next_sgmt(self):
-        if self.cursor >= len(self.seq) - 1:
+        if self.cursor >= len(self.seq):
             return None
         self.cursor += 1
         return self.seq[self.cursor - 1]

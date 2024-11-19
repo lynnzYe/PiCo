@@ -7,7 +7,9 @@ from threading import Thread, Timer
 import time
 import sched
 
+from jedi.debug import speed
 from joblib.testing import timeout
+from sympy.benchmarks.bench_meijerint import alpha
 
 from pico.logger import logger
 from pico.pneno.pneno_seq import PnenoSegment, PnenoSeq, is_note_on, is_note_off, create_pneno_seq_from_midi
@@ -25,24 +27,70 @@ class PnoSegBinder:
 
     def __init__(self):
         self.binding = {}
+        self.noteon_status = {}
 
-    def add(self, key, sgmt: PnenoSegment):
+    def add(self, key, sgmt: PnenoSegment or None):
         self.binding[key] = sgmt
 
-    def pop(self, key):
+    def add_noteon(self, pitch, midi: mido.Message):
+        self.noteon_status[pitch] = midi
+
+    def has_noteon(self, pitch):
+        if pitch in self.noteon_status.keys():
+            return True
+        return False
+
+    def pop_noteon(self, pitch):
+        if pitch in self.noteon_status:
+            self.noteon_status.pop(pitch)
+
+    def pop_binding(self, key):
         return self.binding.pop(key)
 
-    def get_by_midi(self, signal: mido.Message):
+    def pop_by_midi(self, signal: mido.Message):
         if is_note_off(signal):
             return self.binding.pop(signal.note)
         logger.warn("Cannot retrive PnenooSegment by note-on events")
         return None
 
-    def add_midi_binding(self, signal: mido.Message, sgmt: PnenoSegment):
-        if signal.type == 'note_on' and signal.velocity > 0:
+    def add_midi_binding(self, signal: mido.Message, sgmt: PnenoSegment or None):
+        if is_note_on(signal):
             self.add(signal.note, sgmt)
         else:
             logger.warn("Note-off events cannot serve as the key.")
+
+    def nullify_midi_binding(self, signal: mido.Message):
+        if is_note_on(signal):
+            self.add(signal, None)
+        else:
+            logger.warn("Note-off events cannot serve as the key.")
+
+
+class DMYSpeedInterpolator:
+    def interpolate(self):
+        return 1.0
+
+
+class DMAVelocityInterpolator:
+    """Decaying Moving Average Interpolator"""
+
+    def __init__(self, alpha=0.5, decay=0.8):
+        self.alpha = alpha
+        self.decay = decay
+        self._past_vel = None
+
+    def interpolate(self, curr_vel):
+        if self._past_vel is None:
+            self._past_vel = curr_vel * self.decay
+            return int(self._past_vel)
+        else:
+            max_ret = self.decay * curr_vel
+            return int(
+                min(
+                    self.alpha * self.decay * self._past_vel + (1 - self.alpha) * min(max_ret, self._past_vel),
+                    max_ret
+                )
+            )
 
 
 class PnenoSystem:
@@ -53,7 +101,8 @@ class PnenoSystem:
     pno_seq: PnenoSeq
     seg_binder: PnoSegBinder
 
-    def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5):
+    def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5,
+                 speed_interpolator=None, velocity_interpolator=None):
         """
 
         :param input_port_name:
@@ -64,6 +113,9 @@ class PnenoSystem:
         """
         self.input_port = mido.open_input(input_port_name)
         self.output_port = mido.open_output(output_port_name)
+
+        self.speed_interpolator = speed_interpolator if speed_interpolator else DMYSpeedInterpolator()
+        self.velocity_interpolator = velocity_interpolator if velocity_interpolator else DMAVelocityInterpolator()
 
         if pno_seq is None:
             self.pno_seq = PnenoSeq()
@@ -93,8 +145,9 @@ class PnenoSystem:
             self.capture_thread.start()
             self.midi_scheduler.start()
             self.cleaner.start()
+            logger.info("Pneno System started! Press any MIDI key to continue...")
         else:
-            logger.warn("MiMo is not listening to you.")
+            logger.warn("PnenoSystem is not listening to you.")
 
     def listen(self):
         while self.running_event.is_set():
@@ -164,48 +217,76 @@ class PnenoSystem:
                 scheduler.run(blocking=False)
             time.sleep(0.01)
 
-    def schedule_midi_seq(self, midi_seq, scale_factor=1.0):
+    def express_midi_seq(self, midi_seq: list[mido.Message], speed_scale_factor=1.0, default_velocity=60):
+        """
+        :param midi_seq:
+        :return: list of midi seq (in absolute time) with updated expressive params
+            - midi seq in absolute time
+        """
+        expressive_seq = midi_seq.copy()
+        for e in expressive_seq:
+            e.time *= speed_scale_factor
+            e.velocity = default_velocity
+        return expressive_seq
+
+    def schedule_midi_seq(self, midi_seq):
         if not self.midi_scheduler.is_alive():
             logger.warn("Midi scheduler not started!")
             return
         for e in midi_seq:
-            scheduler.enter(self.pno_seq.ticks_to_seconds(e.time) * scale_factor, 1, self.output_port.send, (e,))
+            e.channel = 0
+            scheduler.enter(self.pno_seq.ticks_to_seconds(e.time), 1, self.output_port.send, (e,))
 
     def get_sgmt(self, m: mido.Message):
         sgmt = None
         if self.pno_seq.empty():
-            logger.warn("Empty note sequence. You have completed the performance. Well done.")
+            logger.warn("Empty note sequence. You need to register a Pneno Sequence (PnenoSeq) to perform")
+            return None
+        elif self.pno_seq.is_end():
+            # End of performance reached
+            return None
         if is_note_on(m):
             sgmt = self.pno_seq.get_next_sgmt()
             self.seg_binder.add_midi_binding(m, sgmt)
-        # else:
-        #     sgmt = self.seg_binder.get_by_midi(m)
-        if sgmt is None:
-            return None
         return sgmt
-
-    def interpolate_speed_scaling(self, n_history=5):
-        """
-        Given performance history, interpolate the current playback speed.
-        :return:
-        """
-        return 1.0
 
     def play_sgmt(self, sgmt: PnenoSegment, midi: mido.Message):
         if sgmt is None and is_note_off(midi):
-            seg = self.seg_binder.get_by_midi(midi)
+            seg = self.seg_binder.pop_by_midi(midi)
             if seg is None:
-                return
-            key_midi_off = mido.Message(type='note_off', note=seg.key.pitch, channel=0, velocity=midi.velocity, time=0)
+                return  # note-on already terminated by another touch signal
+            key_midi_off = mido.Message(type='note_off', note=seg.key.pitch, channel=0, velocity=midi.velocity,
+                                        time=0)
             self.output_port.send(key_midi_off)
+            self.seg_binder.pop_noteon(seg.key.pitch)
+            if not self.seg_binder.noteon_status and self.pno_seq.is_end():
+                # Reached end of performance
+                logger.info("You have completed the performance. Bravo!")
+                self.listening = False
+                self.running_event.clear()
+                logger.info("You may now exit by pressing [Enter]")
         if is_note_on(midi):
             # Apply input midi velocity to sgmt key
+            if sgmt is None:
+                logger.debug("Received empty sgmt with note-on")
+                return
+            elif self.seg_binder.has_noteon(sgmt.key.pitch):
+                key_mid = self.seg_binder.noteon_status[sgmt.key.pitch]
+                self.seg_binder.add_midi_binding(key_mid, None)
+                end_midi = mido.Message(type='note_off', note=sgmt.key.pitch, channel=0, velocity=midi.velocity,
+                                        time=0)
+                self.output_port.send(end_midi)
+
+            self.seg_binder.add_noteon(sgmt.key.pitch, midi)  # always update current noteon with the latest midi
             key_midi = mido.Message(type='note_on', note=sgmt.key.pitch, channel=0, velocity=midi.velocity, time=0)
             logger.debug("Sending:", midi)
             self.output_port.send(key_midi)
 
-            midi_seq = sgmt.to_midi_seq(use_absolute_time=True, include_key=False, start_from_zero=True)
-            self.schedule_midi_seq(midi_seq, self.interpolate_speed_scaling())
+            midi_seq = self.express_midi_seq(
+                sgmt.to_midi_seq(use_absolute_time=True, include_key=False, start_from_zero=True),
+                speed_scale_factor=self.speed_interpolator.interpolate(),
+                default_velocity=self.velocity_interpolator.interpolate(midi.velocity))
+            self.schedule_midi_seq(midi_seq)
 
     def add_note_seq(self, pitch_arr: list[int]):
         logger.info('Appended note list: ', pitch_arr)
@@ -227,7 +308,9 @@ def main():
     inp, oup = choose_midi_input()
     pno = PnenoSystem(inp, oup, pno_seq=pneno_seq)
     pno.start_realtime_capture()
-    input("Press [Enter] to stop")
+    time.sleep(0.5)
+    logger.info("Press [Enter] to stop")
+    input('')
     pno.stop()
 
 
@@ -235,5 +318,7 @@ if __name__ == '__main__':
     logger.set_level(logging.DEBUG)
     main()
 
-
-# TODO @Bmois: record performance data save as rehearsal data for tempo estimation
+# TODO @Bmois:
+#  1. solve same-note on off debug
+#  2. real-time tempo estimation
+#  3. record performance data save as rehearsal data for tempo estimation

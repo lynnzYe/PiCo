@@ -29,7 +29,7 @@ def create_interactive_sessino(sf_path):
 
     mimo = build_mimo()
     logger.info("The interactive demo is about to start.")
-    input("\n\n[Press enter to start]")
+    # input("\n\n[Press enter to start]")
     mimo.start_realtime_capture()
 
     try:
