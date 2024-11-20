@@ -1,4 +1,5 @@
-from pico.pneno.pneno_seq import PnenoSeq, create_pneno_seq_from_midi
+import os.path
+
 from pico.logger import logger
 
 from abc import abstractmethod
@@ -6,6 +7,8 @@ from scipy import stats
 import pickle
 
 from pico.util.midi_util import seconds_to_ticks
+
+IOI_PLACEHOLDER = 1
 
 
 class SpeedInterpolator:
@@ -40,7 +43,7 @@ class IFPSpeedInterpolator(SpeedInterpolator):
     This class mainly works with inter-onset intervals (IOI) and its ratios.
     """
 
-    def __init__(self, wh=.5, wp=.2, wt=.6, window_size=5,
+    def __init__(self, wh=.8, wp=.3, wt=.6, window_size=5,
                  score_ioi: list[float] = None, template_ioi: list[float] = None):
         """
         :param wh: how stable the predicted tempo will be
@@ -59,10 +62,10 @@ class IFPSpeedInterpolator(SpeedInterpolator):
         self.pred_bpm_history = []  # as ratio (store predicted bpm for future reference)
         self.tplt_bpm_history = []  # borrowing the term "performance template" from the iFP paper
         if score_ioi is not None:
-            assert 0 not in score_ioi and score_ioi[0] == 1
+            assert 0 not in score_ioi and score_ioi[0] == IOI_PLACEHOLDER
             self.score_ioi_list = score_ioi
         if template_ioi is not None:
-            self.load_template(template_ioi) and template_ioi[0] == 1
+            self.load_template(score_ioi, template_ioi) and template_ioi[0] == IOI_PLACEHOLDER
         self.cursor = 0
 
     def __repr__(self):
@@ -92,15 +95,23 @@ class IFPSpeedInterpolator(SpeedInterpolator):
         self.user_bpm_history.append(curr_bpm)
         self.pred_bpm_history.append(pred_bpm_ratio)
         self.cursor += 1
+        logger.debug("current bpm:", curr_bpm)
+        logger.debug("bpm history:", self.user_bpm_history)
+        logger.debug("predicted bpm:", pred_bpm_ratio)
         return pred_bpm_ratio
 
     def load_score(self, score_ioi_list: list[float]):
-        assert 0 not in score_ioi_list and score_ioi_list[0] == 1
+        assert 0 not in score_ioi_list and score_ioi_list[0] == IOI_PLACEHOLDER
+        if self.tplt_bpm_history:
+            assert len(self.tplt_bpm_history) == len(score_ioi_list)
         self.score_ioi_list = score_ioi_list
 
-    def load_template(self, template_ioi):
-        assert len(template_ioi) == len(self.score_ioi_list)
-        assert 0 not in template_ioi and template_ioi[0] == 1
+    def load_template(self, score_ioi_list, template_ioi):
+        if template_ioi is None or score_ioi_list is None:
+            logger.warn("Require both score ioi and template ioi to load template")
+            return
+        self.load_score(score_ioi_list)
+        assert 0 not in template_ioi and template_ioi[0] == IOI_PLACEHOLDER
         tplt_bpm_history = []
         for i, e in enumerate(template_ioi):
             tplt_bpm_history.append(e / self.score_ioi_list[i])
@@ -117,6 +128,9 @@ def parse_ifp_performance_ioi(perf_file):
     :param perf_file:  perf_data.pkl
     :return:
     """
+    if perf_file is None:
+        return None, None
+    assert os.path.exists(perf_file)
     with open(perf_file, 'rb') as f:
         data = pickle.load(f)
 
@@ -134,9 +148,9 @@ def parse_ifp_performance_ioi(perf_file):
             time_list.append(e[0])
             score_ioi_list.append(e[2].onset - curr_tick)
             curr_tick = e[2].onset
-    score_ioi_list[0] = 1  # For IFP
+    score_ioi_list[0] = IOI_PLACEHOLDER  # For IFP
     curr_onset = time_list[0]
-    tplt_ioi_list = [1]
+    tplt_ioi_list = [IOI_PLACEHOLDER]
     for i in range(1, len(time_list)):
         tplt_ioi_list.append(
             seconds_to_ticks(seconds=time_list[i] - curr_onset, tempo=tempo, ticks_per_beat=ticks_per_beat))

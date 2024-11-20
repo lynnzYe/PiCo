@@ -36,11 +36,10 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
     if mode == 0:
         return MonoPiCo(input_port_name=in_port, output_port_name=out_port, **kwargs)
     elif mode == 1:
-        speed_interpolator = DMYSpeedInterpolator()
-        # speed_interpolator = IFPSpeedInterpolator()
-        # if 'ref_perf' in args:
-        #     _, tplt_ioi = parse_ifp_performance_ioi(args['ref_perf'])
-        #     speed_interpolator.load_template(tplt_ioi)
+        # speed_interpolator = DMYSpeedInterpolator()
+        speed_interpolator = IFPSpeedInterpolator()
+        score_ioi, tplt_ioi = parse_ifp_performance_ioi(kwargs.get('ref_perf'))
+        speed_interpolator.load_template(score_ioi, tplt_ioi)
         return PnenoSystem(input_port_name=in_port, output_port_name=out_port,
                            speed_interpolator=speed_interpolator, session_save_path=kwargs.get('session_save_path'))
     else:
@@ -99,12 +98,16 @@ def main():
 
 
 def debug_main():
-    sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
+    logger.set_level(logging.DEBUG)
+    # sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
+    sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/piano.sf2'
     score_path = '/Users/kurono/Desktop/pneno_demo.mid'
-    sess_save_path = '/Users/kurono/Desktop'
-    # sess_save_path = None
-    ref_perf = 'session_save_path'
-    start_interactive_session(sf_path=sf_path, score_path=score_path, session_save_path=sess_save_path)
+    sess_save_path = None
+    # sess_save_path = '/Users/kurono/Desktop'
+    # ref_perf = None
+    ref_perf = '/Users/kurono/Desktop/perf_data.pkl'
+    start_interactive_session(sf_path=sf_path, score_path=score_path, session_save_path=sess_save_path,
+                              ref_perf=ref_perf)
 
 
 if __name__ == '__main__':

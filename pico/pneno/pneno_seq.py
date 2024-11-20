@@ -11,6 +11,7 @@ from dask.array import absolute
 from jams.eval import tempo
 
 from pico.logger import logger
+from pico.pneno.interpolator import IOI_PLACEHOLDER
 from pico.util.midi_util import ticks_to_seconds, seconds_to_ticks
 
 
@@ -176,10 +177,10 @@ class PnenoSeq:
 
     def to_ioi_list(self):
         ioi_list = []
-        curr_onset = self.seq[0].onset
-        for i in range(1, len(self.seq)):
-            ioi_list.append(self.seq[i].onset - curr_onset)
-            curr_onset = self.seq[i].onset
+        curr_onset = self.seq[0].onset - IOI_PLACEHOLDER
+        for e in self.seq:
+            ioi_list.append(e.onset - curr_onset)
+            curr_onset = e.onset
         return ioi_list
 
 

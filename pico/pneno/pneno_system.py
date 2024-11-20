@@ -112,6 +112,7 @@ class PnenoSystem(PiCo):
         self.cleaner = None
 
         self._stopped = False
+        self._prev_time = 0
 
     def load_score(self, score):
         assert type(score) == PnenoSeq
@@ -199,6 +200,7 @@ class PnenoSystem(PiCo):
 
         # If a path is provided, write the performance data
         self.save_performance_data()
+        self._prev_time = 0
         self._stopped = True
 
     def run_midi_scheduler(self):
@@ -272,11 +274,14 @@ class PnenoSystem(PiCo):
             logger.debug("Sending:", midi)
             self.output_port.send(key_midi)
 
+            curr_ioi = self.pno_seq.seconds_to_ticks(time.time() - self._prev_time) if self._prev_time != 0 else 1
+            logger.debug('Current ioi:', curr_ioi, 'midi time:', midi.time, 'prev time:', self._prev_time)
             midi_seq = self.express_midi_seq(
                 sgmt.to_midi_seq(use_absolute_time=True, include_key=False, start_from_zero=True),
-                speed_scale_factor=self.speed_interpolator.interpolate(),
+                speed_scale_factor=self.speed_interpolator.interpolate(curr_ioi),
                 default_velocity=self.velocity_interpolator.interpolate(midi.velocity))
             self.schedule_midi_seq(midi_seq)
+            self._prev_time = time.time()
 
     def add_note_seq(self, pitch_arr: list[int]):
         logger.info('Appended note list: ', pitch_arr)
