@@ -1,76 +1,169 @@
-from sympy import numer
-
-from pico.pneno.pneno_seq import PnenoSeq
+from pico.pneno.pneno_seq import PnenoSeq, create_pneno_seq_from_midi
 from pico.logger import logger
 
+from abc import abstractmethod
+from scipy import stats
+import pickle
 
-class DMYSpeedInterpolator:
-    def interpolate(self):
+from pico.util.midi_util import seconds_to_ticks
+
+
+class SpeedInterpolator:
+    @abstractmethod
+    def load_score(self, score):
+        pass
+
+    @abstractmethod
+    def interpolate(self, curr_ioi):
+        pass
+
+    @abstractmethod
+    def __repr__(self):
+        return "SpeedInterpolator()"
+
+
+class DMYSpeedInterpolator(SpeedInterpolator):
+    def load_score(self, score=None):
+        pass
+
+    def interpolate(self, curr_ioi=None):
         return 1.0
 
+    def __repr__(self):
+        return "DMYSpeedInterpolator()"
 
-class IFPSpeedInterpolator:
+
+class IFPSpeedInterpolator(SpeedInterpolator):
     """
     Reference: https://www.cs.tufts.edu/~jacob/250aui/ifp-performance-template.pdf
+
+    This class mainly works with inter-onset intervals (IOI) and its ratios.
     """
 
-    def __init__(self, wh=1.0, wp=.25, wt=.5, window_size=5, note_seq: PnenoSeq = None):
+    def __init__(self, wh=.5, wp=.2, wt=.6, window_size=5,
+                 score_ioi: list[float] = None, template_ioi: list[float] = None):
+        """
+        :param wh: how stable the predicted tempo will be
+        :param wp: how responsive
+        :param wt: how much influence from the template
+        :param window_size:
+        :param score_ioi:  first element should always be 1 as a placeholder for the first tempo prediction
+        :param template_ioi:    first element should always be 1 as a placeholder for the first tempo prediction
+        """
         self.wh = wh
         self.wp = wp
         self.wt = wt
         self.w_size = window_size
-        self.ioi_list = []
-        self.bpm_ratio_history = [1.0]
-        if note_seq is not None:
-            self.build_ioi_list(note_seq)
-        self.cursor = 1
+        self.score_ioi_list = []  # the first element is the ioi between note[0] and note[1]
+        self.user_bpm_history = []  # as ratio
+        self.pred_bpm_history = []  # as ratio (store predicted bpm for future reference)
+        self.tplt_bpm_history = []  # borrowing the term "performance template" from the iFP paper
+        if score_ioi is not None:
+            assert 0 not in score_ioi and score_ioi[0] == 1
+            self.score_ioi_list = score_ioi
+        if template_ioi is not None:
+            self.load_template(template_ioi) and template_ioi[0] == 1
+        self.cursor = 0
 
-    def interpolate_current_speed(self, curr_ioi):
-        if not self.ioi_list:
+    def __repr__(self):
+        return (f"IFPSpeedInterpolator(wh={self.wh}, wp={self.wp}, wt={self.wt}, "
+                f"window_size={self.w_size}, ..)")
+
+    def interpolate(self, curr_ioi):
+        if not self.score_ioi_list:
             logger.warn("IOI list is empty! cannot interpolate properly.")
             return 1.0
-        if self.cursor >= len(self.ioi_list):
+        if self.cursor >= len(self.score_ioi_list):
             logger.warn("IOI cursor exceeds list len! This is a bug.")
             return 1.0
-        input_ioi_ratio = curr_ioi / self.ioi_list[self.cursor]
+        curr_bpm = curr_ioi / self.score_ioi_list[self.cursor]
+        if self.cursor == 0 and self.tplt_bpm_history:
+            curr_bpm = self.tplt_bpm_history[0]
 
-        bpm__1 = self.bpm_ratio_history[-1] if len(self.bpm_ratio_history) == 1 else 1.0
-        bpm__2 = self.bpm_ratio_history[-2] if len(self.bpm_ratio_history) == 2 else 1.0
-        sum_size = min(len(self.bpm_ratio_history), self.w_size)
+        bpm__1 = self.user_bpm_history[-1] if len(self.user_bpm_history) >= 1 else 1.0
+        bpm__2 = self.user_bpm_history[-2] if len(self.user_bpm_history) >= 2 else 1.0
+        tplt_bpm = self.tplt_bpm_history[self.cursor] if self.tplt_bpm_history else 1.0
+        sum_size = min(len(self.user_bpm_history), self.w_size) if self.user_bpm_history else 1
+        bpm_sum = sum(self.user_bpm_history[-sum_size:]) if self.user_bpm_history else 1
+        avg_bpm = bpm_sum / sum_size
 
-        bpm_ratio = ((self.wt * input_ioi_ratio + self.wh * (
-                1 / sum_size * sum(self.bpm_ratio_history[-sum_size:])))
-                     * 1 / (self.wt + self.wh) * (bpm__1 / bpm__2) ** self.wp)
-        self.bpm_ratio_history.append(bpm_ratio)
+        pred_bpm_ratio = ((self.wt * tplt_bpm + self.wh * avg_bpm)
+                          * 1 / (self.wt + self.wh) * (bpm__1 / bpm__2) ** self.wp)
+        self.user_bpm_history.append(curr_bpm)
+        self.pred_bpm_history.append(pred_bpm_ratio)
         self.cursor += 1
-        return bpm_ratio
+        return pred_bpm_ratio
+
+    def load_score(self, score_ioi_list: list[float]):
+        assert 0 not in score_ioi_list and score_ioi_list[0] == 1
+        self.score_ioi_list = score_ioi_list
+
+    def load_template(self, template_ioi):
+        assert len(template_ioi) == len(self.score_ioi_list)
+        assert 0 not in template_ioi and template_ioi[0] == 1
+        tplt_bpm_history = []
+        for i, e in enumerate(template_ioi):
+            tplt_bpm_history.append(e / self.score_ioi_list[i])
+        # Assign average bpm to the first
+        tplt_bpm_history[0] = stats.trim_mean(tplt_bpm_history[1:], 0.2)
+        self.tplt_bpm_history = tplt_bpm_history
 
     def is_end(self):
-        return self.cursor == len(self.ioi_list)
-
-    def build_ioi_list(self, note_seq: PnenoSeq):
-        """
-        Build tempo for
-        :param note_seq:
-        :return:
-        """
-        self.ioi_list = []
-        curr_onset = note_seq.seq[0].onset
-        for i, e in enumerate(note_seq.seq):
-            self.ioi_list.append(e.onset - curr_onset)
-            curr_onset = e.onset
-
-    def load_ioi_list(self, ioi_list: list[float]):
-        self.ioi_list = ioi_list
+        return self.cursor == len(self.score_ioi_list)
 
 
-class DMAVelocityInterpolator:
+def parse_ifp_performance_ioi(perf_file):
+    """
+    :param perf_file:  perf_data.pkl
+    :return:
+    """
+    with open(perf_file, 'rb') as f:
+        data = pickle.load(f)
+
+    # deque of (time, msg, sgmt)
+    ticks_per_beat = data['ticks_per_beat']
+    tempo = data['tempo']
+    perf_seq = data['performance']
+
+    # Parse score IOI & performed IOI
+    time_list = []
+    score_ioi_list = []
+    curr_tick = perf_seq[0][2].onset
+    for e in perf_seq:
+        if e[1].type == 'note_on':
+            time_list.append(e[0])
+            score_ioi_list.append(e[2].onset - curr_tick)
+            curr_tick = e[2].onset
+    score_ioi_list[0] = 1  # For IFP
+    curr_onset = time_list[0]
+    tplt_ioi_list = [1]
+    for i in range(1, len(time_list)):
+        tplt_ioi_list.append(
+            seconds_to_ticks(seconds=time_list[i] - curr_onset, tempo=tempo, ticks_per_beat=ticks_per_beat))
+        curr_onset = time_list[i]
+    return score_ioi_list, tplt_ioi_list
+
+
+class VelocityInterpolator:
+    @abstractmethod
+    def interpolate(self, curr_vel):
+        pass
+
+    @abstractmethod
+    def __repr__(self):
+        pass
+
+
+class DMAVelocityInterpolator(VelocityInterpolator):
     """Decaying Moving Average Interpolator"""
 
     def __init__(self, alpha=0.5, decay=0.8):
         self.alpha = alpha
         self.decay = decay
         self._past_vel = None
+
+    def __repr__(self):
+        return f"DMAVelocityInterpolator(alpha={self.alpha}, decay={self.decay}, .."
 
     def interpolate(self, curr_vel):
         if self._past_vel is None:
@@ -84,3 +177,28 @@ class DMAVelocityInterpolator:
                     max_ret
                 )
             )
+
+
+def main():
+    # score_ioi = [20, 10, 10, 20, 20]
+    # performed_ioi = [25, 15, 15, 18, 18]
+    # ifp = IFPSpeedInterpolator(score_ioi_list=score_ioi, template_ioi=performed_ioi)
+
+    midi_path = '/Users/kurono/Desktop/pneno_demo.mid'
+    perf_data = '/Users/kurono/Desktop/perf_data.pkl'
+    score_ioi, template_ioi = parse_ifp_performance_ioi(perf_data)
+    # print(score_ioi)
+    # print(template_ioi)
+
+    ifp = IFPSpeedInterpolator(score_ioi=score_ioi, template_ioi=template_ioi)
+    # ifp.load_template(template_ioi)
+
+    for e in template_ioi:
+        ifp.interpolate(e)
+    print("Simple Scoring! how on-time did you play?")
+    print(f'{sum(ifp.user_bpm_history) / len(ifp.user_bpm_history) * 100:.2f}%')
+    print('Raw data:', ifp.user_bpm_history)
+
+
+if __name__ == '__main__':
+    main()

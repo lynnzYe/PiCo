@@ -3,11 +3,14 @@ import logging
 import os
 import time
 
+from jedi.debug import speed
+
 import pico.mono_pico.music.music_seq
 from pico.logger import logger
 from pico.mono_pico.util.synthesizer import Fluidx
 from pico.pico import PiCo
 from pico.mono_pico.mono_pico import MonoPiCo
+from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi, DMYSpeedInterpolator
 from pico.pneno.pneno_seq import PnenoSeq, create_pneno_seq_from_midi
 from pico.pneno.pneno_system import PnenoSystem
 from pico.util.midi_util import choose_midi_input, array_choice
@@ -22,7 +25,7 @@ def choose_pico_mode():
     return array_choice('', len(modes))
 
 
-def create_pico_system(in_port, out_port, mode) -> PiCo or None:
+def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
     """
     Factory function for creating Piano Conductor systems
     :param in_port:   MIDI input port name
@@ -31,9 +34,15 @@ def create_pico_system(in_port, out_port, mode) -> PiCo or None:
     :return:
     """
     if mode == 0:
-        return MonoPiCo(input_port_name=in_port, output_port_name=out_port)
+        return MonoPiCo(input_port_name=in_port, output_port_name=out_port, **kwargs)
     elif mode == 1:
-        return PnenoSystem(input_port_name=in_port, output_port_name=out_port)
+        speed_interpolator = DMYSpeedInterpolator()
+        # speed_interpolator = IFPSpeedInterpolator()
+        # if 'ref_perf' in args:
+        #     _, tplt_ioi = parse_ifp_performance_ioi(args['ref_perf'])
+        #     speed_interpolator.load_template(tplt_ioi)
+        return PnenoSystem(input_port_name=in_port, output_port_name=out_port,
+                           speed_interpolator=speed_interpolator, session_save_path=kwargs.get('session_save_path'))
     else:
         logger.warn("Unknown mode:", mode)
     return None
@@ -47,7 +56,7 @@ def create_score(mode, score_path=None):
         return create_pneno_seq_from_midi(score_path)
 
 
-def start_interactive_session(sf_path, score_path=None):
+def start_interactive_session(sf_path, score_path=None, **kwargs):
     """
 
     :param sf_path:
@@ -60,13 +69,13 @@ def start_interactive_session(sf_path, score_path=None):
 
     in_port, out_port = choose_midi_input()
     mode = choose_pico_mode()
-    pico = create_pico_system(in_port=in_port, out_port=out_port, mode=mode)
+    pico_system = create_pico_system(in_port=in_port, out_port=out_port, mode=mode, **kwargs)
     score = create_score(mode, score_path)
-    pico.load_score(score)
-    pico.start_realtime_capture()
+    pico_system.load_score(score)
+    pico_system.start_realtime_capture()
 
     input("\nPress [Enter] to stop\n")
-    pico.stop()
+    pico_system.stop()
     synthesizer.stop()
 
 
@@ -78,15 +87,24 @@ def main():
     # Adding arguments
     parser.add_argument('--sf_path', type=str, required=True, help="Path to the sound font")
     parser.add_argument('--midi_path', type=str, required=False, help="Path to a MIDI file")
+    parser.add_argument('--sess_save_path', type=str, required=False,
+                        help='If provided, performance will be saved at the given path')
+    parser.add_argument('--ref_perf', type=str, required=False,
+                        help="Path to a performance.pkl file as a reference for tempo prediction")
     args = parser.parse_args()
 
-    start_interactive_session(sf_path=args.sf_path, score_path=args.midi_path)
+    start_interactive_session(sf_path=args.sf_path, score_path=args.midi_path,
+                              session_save_path=args.sess_save_path,
+                              ref_perf=args.ref_perf)
 
 
 def debug_main():
     sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
     score_path = '/Users/kurono/Desktop/pneno_demo.mid'
-    start_interactive_session(sf_path=sf_path, score_path=score_path)
+    sess_save_path = '/Users/kurono/Desktop'
+    # sess_save_path = None
+    ref_perf = 'session_save_path'
+    start_interactive_session(sf_path=sf_path, score_path=score_path, session_save_path=sess_save_path)
 
 
 if __name__ == '__main__':
@@ -94,4 +112,8 @@ if __name__ == '__main__':
     debug_main()
     # main()
 
-# TODO @Bmois: accept MIDI input and convert to pneno MIDI (separate anchor MIDI events from segments)
+# TODO @Bmois:
+#  1. accept MIDI input and convert to pneno MIDI (separate anchor MIDI events from segments)
+#  2. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),
+#           then calculate IOI ratio deviation to score the performance! It will be a fun game!
+#           (okay. so 17lianqin's automatic accompaniment may also achieve this, but only if no fluctuations...)

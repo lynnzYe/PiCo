@@ -11,6 +11,7 @@ from dask.array import absolute
 from jams.eval import tempo
 
 from pico.logger import logger
+from pico.util.midi_util import ticks_to_seconds, seconds_to_ticks
 
 
 class PnenoPitch:
@@ -168,7 +169,18 @@ class PnenoSeq:
         return events
 
     def ticks_to_seconds(self, ticks):
-        return (ticks * self.tempo) / (self.ticks_per_beat * 1_000_000)
+        return ticks_to_seconds(ticks=ticks, tempo=self.tempo, ticks_per_beat=self.ticks_per_beat)
+
+    def seconds_to_ticks(self, seconds):
+        return seconds_to_ticks(seconds=seconds, tempo=self.tempo, ticks_per_beat=self.ticks_per_beat)
+
+    def to_ioi_list(self):
+        ioi_list = []
+        curr_onset = self.seq[0].onset
+        for i in range(1, len(self.seq)):
+            ioi_list.append(self.seq[i].onset - curr_onset)
+            curr_onset = self.seq[i].onset
+        return ioi_list
 
 
 def is_note_on(m: mido.Message):

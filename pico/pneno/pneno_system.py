@@ -3,14 +3,14 @@ import os.path
 import threading
 
 import mido
+import pickle
 from collections import deque
 from threading import Thread, Timer
 import time
 import sched
-import pickle
 
 from pico.logger import logger
-from pico.pneno.interpolator import DMYSpeedInterpolator, DMAVelocityInterpolator
+from pico.pneno.interpolator import DMYSpeedInterpolator, DMAVelocityInterpolator, IFPSpeedInterpolator
 from pico.pneno.pneno_seq import PnenoSegment, PnenoSeq, is_note_on, is_note_off, create_pneno_seq_from_midi
 from pico.util.midi_util import choose_midi_input
 from pico.pico import PiCo
@@ -111,12 +111,12 @@ class PnenoSystem(PiCo):
         self.capture_thread = None
         self.cleaner = None
 
-    def __del__(self):
-        self.stop()
+        self._stopped = False
 
     def load_score(self, score):
         assert type(score) == PnenoSeq
         self.pno_seq = score
+        self.speed_interpolator.load_score(self.pno_seq.to_ioi_list())
 
     def start_realtime_capture(self):
         if self.listening:
@@ -156,6 +156,8 @@ class PnenoSystem(PiCo):
             # break
 
     def stop(self):
+        if self._stopped:
+            return
         logger.info("Stopping Pneno...")
         self.listening = False
         self.running_event.clear()  # Signal the thread to stop
@@ -189,24 +191,15 @@ class PnenoSystem(PiCo):
             logger.debug("Cleaner timer stopped.")
             self.cleaner = None
 
-        # Finally close the output port
+        #  Close the output port
         if self.output_port is not None:
             self.output_port.close()
             logger.debug("MIDI output port closed.")
             self.output_port = None
 
-        # Export performance data if asked
-        if self.session_save_path:
-            save_path = f'{self.session_save_path}/perf_data.pkl'
-            fname_add = 0
-            if os.path.exists(f'{self.session_save_path}/perf_data.pkl'):
-                logger.warn("Existing performance data exist")
-                while os.path.exists(f'{self.session_save_path}/perf_data_{fname_add}.pkl'):
-                    fname_add += 1
-                save_path = f'{self.session_save_path}/perf_data_{fname_add}.pkl'
-            with open(save_path, 'wb') as f:
-                pickle.dump(self.history, f)
-                print('Performance history saved to:', save_path)
+        # If a path is provided, write the performance data
+        self.save_performance_data()
+        self._stopped = True
 
     def run_midi_scheduler(self):
         while self.listening:
@@ -299,6 +292,26 @@ class PnenoSystem(PiCo):
         self.cleaner = Timer(self.clean_intv, self.clean_history)  # Restart timer
         self.cleaner.start()
 
+    def save_performance_data(self):
+        if self.session_save_path:
+            save_path = f'{self.session_save_path}/perf_data.pkl'
+            fname_add = 0
+            data = {
+                "ticks_per_beat": self.pno_seq.ticks_per_beat,
+                "tempo": self.pno_seq.tempo,
+                "pred_velocity": repr(self.velocity_interpolator),
+                "pred_speed": repr(self.speed_interpolator),
+                "performance": self.history,
+            }
+            if os.path.exists(f'{self.session_save_path}/perf_data.pkl'):
+                logger.warn("Existing performance data exist")
+                while os.path.exists(f'{self.session_save_path}/perf_data_{fname_add}.pkl'):
+                    fname_add += 1
+                save_path = f'{self.session_save_path}/perf_data_{fname_add}.pkl'
+            with open(save_path, 'wb') as f:
+                pickle.dump(data, f)
+                print('Performance history saved to:', save_path)
+
 
 def start_interactive_session(midi_path):
     pneno_seq = create_pneno_seq_from_midi(midi_path)
@@ -313,7 +326,11 @@ def start_interactive_session(midi_path):
 
 def main():
     midi_path = '/Users/kurono/Desktop/pneno_demo.mid'
-    start_interactive_session(midi_path)
+    # start_interactive_session(midi_path)
+
+    # perf = '/Users/kurono/Desktop/perf_data.pkl'
+    # pno_seq = create_pneno_seq_from_midi(midi_path)
+    # print(parse_ifp_performance_ioi(perf, pno_seq.seconds_to_ticks))
 
 
 if __name__ == '__main__':
