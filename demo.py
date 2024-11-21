@@ -38,8 +38,9 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
     elif mode == 1:
         # speed_interpolator = DMYSpeedInterpolator()
         speed_interpolator = IFPSpeedInterpolator()
-        score_ioi, tplt_ioi = parse_ifp_performance_ioi(kwargs.get('ref_perf'))
-        speed_interpolator.load_template(score_ioi, tplt_ioi)
+        if kwargs.get('ref_perf') is not None:
+            score_ioi, tplt_ioi = parse_ifp_performance_ioi(kwargs.get('ref_perf'))
+            speed_interpolator.load_template(score_ioi, tplt_ioi)
         return PnenoSystem(input_port_name=in_port, output_port_name=out_port,
                            speed_interpolator=speed_interpolator, session_save_path=kwargs.get('session_save_path'))
     else:
