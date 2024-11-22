@@ -76,12 +76,19 @@ class IFPSpeedInterpolator(SpeedInterpolator):
 
     def interpolate(self, curr_ioi):
         """
-        Should interpolate based on following IOI
+        Ideal case: interpolate based on the following IOI
         P1 - P2 - P3 - P4
            a    b    c
-        Use 'a' to predict P1's bpm.
+        Use `a` to predict P1's bpm.
 
-        However, during demo a can only be known after P2 is performed.
+        However, during demo, `a` can only be known after P2 is performed.
+
+        Therefore, we will have 2 modes of interpolation:
+        1. real-time prediction
+            - used past bpm as current bpm -> which of course does not work quite well.
+        2. template-based prediction
+            - use template bpm as current bpm
+
         use a' to predict P2's speed
         [a, b, c]
         :param curr_ioi:
@@ -90,6 +97,9 @@ class IFPSpeedInterpolator(SpeedInterpolator):
         if not self.score_ioi_list:
             logger.warn("IOI list is empty! cannot interpolate properly.")
             return 1.0
+        if self.cursor == len(self.score_ioi_list) - 1:
+            # TODO @Bmois: Because there are no subsequent notes to compute IOI, use the last performed BPM to predict
+            return self.user_bpm_history[-1]
         if self.cursor >= len(self.score_ioi_list):
             logger.warn("IOI cursor exceeds list len! This is a bug.")
             return 1.0
@@ -99,7 +109,7 @@ class IFPSpeedInterpolator(SpeedInterpolator):
 
         bpm__1 = self.user_bpm_history[-1] if len(self.user_bpm_history) >= 1 else 1.0
         bpm__2 = self.user_bpm_history[-2] if len(self.user_bpm_history) >= 2 else 1.0
-        tplt_bpm = self.tplt_bpm_history[self.cursor] if self.tplt_bpm_history else 1.0
+        tplt_bpm = self.tplt_bpm_history[self.cursor + 1] if self.tplt_bpm_history else 1.0
         sum_size = min(len(self.user_bpm_history), self.w_size) if self.user_bpm_history else 1
         bpm_sum = sum(self.user_bpm_history[-sum_size:]) if self.user_bpm_history else 1
         avg_bpm = bpm_sum / sum_size

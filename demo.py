@@ -122,4 +122,3 @@ if __name__ == '__main__':
 #           then calculate IOI ratio deviation to score the performance! It will be a fun game!
 #       - additional feature: rehearsal data, and see where you often miss!
 #  3. Ridardando practice! select a q in [2,3], then craft the IOI to reflect that tempo change!
-
