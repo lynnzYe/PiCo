@@ -75,13 +75,25 @@ class IFPSpeedInterpolator(SpeedInterpolator):
                 f"window_size={self.w_size}, ..)")
 
     def interpolate(self, curr_ioi):
+        """
+        Should interpolate based on following IOI
+        P1 - P2 - P3 - P4
+           a    b    c
+        Use 'a' to predict P1's bpm.
+
+        However, during demo a can only be known after P2 is performed.
+        use a' to predict P2's speed
+        [a, b, c]
+        :param curr_ioi:
+        :return:
+        """
         if not self.score_ioi_list:
             logger.warn("IOI list is empty! cannot interpolate properly.")
             return 1.0
         if self.cursor >= len(self.score_ioi_list):
             logger.warn("IOI cursor exceeds list len! This is a bug.")
             return 1.0
-        curr_bpm = curr_ioi / self.score_ioi_list[self.cursor]
+        curr_bpm = self.score_ioi_list[self.cursor] / curr_ioi  # bpm should be inversely proportionate to IOI
         if self.cursor == 0 and self.tplt_bpm_history:
             curr_bpm = self.tplt_bpm_history[0]
 
@@ -100,7 +112,7 @@ class IFPSpeedInterpolator(SpeedInterpolator):
         logger.debug("current bpm:", curr_bpm)
         logger.debug("bpm history:", self.user_bpm_history)
         logger.debug("predicted bpm:", pred_bpm_ratio)
-        return pred_bpm_ratio
+        return 1 / pred_bpm_ratio  # Ratio to be multiplied with onsets
 
     def load_score(self, score_ioi_list: list[float]):
         assert 0 not in score_ioi_list and score_ioi_list[0] == IOI_PLACEHOLDER
@@ -116,9 +128,7 @@ class IFPSpeedInterpolator(SpeedInterpolator):
         assert 0 not in template_ioi and template_ioi[0] == IOI_PLACEHOLDER
         tplt_bpm_history = []
         for i, e in enumerate(template_ioi):
-            tplt_bpm_history.append(e / self.score_ioi_list[i])
-        # Assign average bpm to the first
-        tplt_bpm_history[0] = stats.trim_mean(tplt_bpm_history[1:], 0.2)
+            tplt_bpm_history.append(self.score_ioi_list[i] / e)  # Bpm is inversely proportionate to IOI
         self.tplt_bpm_history = tplt_bpm_history
 
     def is_end(self):

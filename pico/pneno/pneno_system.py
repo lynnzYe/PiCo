@@ -10,7 +10,8 @@ import time
 import sched
 
 from pico.logger import logger
-from pico.pneno.interpolator import DMYSpeedInterpolator, DMAVelocityInterpolator, IFPSpeedInterpolator
+from pico.pneno.interpolator import DMYSpeedInterpolator, DMAVelocityInterpolator, IFPSpeedInterpolator, \
+    SpeedInterpolator, VelocityInterpolator
 from pico.pneno.pneno_seq import PnenoSegment, PnenoSeq, is_note_on, is_note_off, create_pneno_seq_from_midi_file
 from pico.util.midi_util import choose_midi_input
 from pico.pico import PiCo
@@ -78,7 +79,8 @@ class PnenoSystem(PiCo):
     seg_binder: PnoSegBinder
 
     def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5,
-                 session_save_path=None, speed_interpolator=None, velocity_interpolator=None):
+                 session_save_path=None,
+                 speed_interpolator: SpeedInterpolator = None, velocity_interpolator: VelocityInterpolator = None):
         """
 
         :param input_port_name:
