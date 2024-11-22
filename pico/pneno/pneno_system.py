@@ -11,7 +11,7 @@ import sched
 
 from pico.logger import logger
 from pico.pneno.interpolator import DMYSpeedInterpolator, DMAVelocityInterpolator, IFPSpeedInterpolator
-from pico.pneno.pneno_seq import PnenoSegment, PnenoSeq, is_note_on, is_note_off, create_pneno_seq_from_midi
+from pico.pneno.pneno_seq import PnenoSegment, PnenoSeq, is_note_on, is_note_off, create_pneno_seq_from_midi_file
 from pico.util.midi_util import choose_midi_input
 from pico.pico import PiCo
 
@@ -319,7 +319,7 @@ class PnenoSystem(PiCo):
 
 
 def start_interactive_session(midi_path):
-    pneno_seq = create_pneno_seq_from_midi(midi_path)
+    pneno_seq = create_pneno_seq_from_midi_file(midi_path)
     inp, oup = choose_midi_input()
     pno = PnenoSystem(inp, oup, pno_seq=pneno_seq)
     pno.start_realtime_capture()

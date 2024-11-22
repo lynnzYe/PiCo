@@ -30,6 +30,15 @@ class PnenoPitch:
                              time=self.offset)]
 
 
+def convert_onsets_to_ioi(onsets: list[float]):
+    curr_onset = onsets[0]
+    ioi_list = []
+    for e in onsets:
+        ioi_list.append(e - curr_onset)
+        curr_onset = e
+    return ioi_list
+
+
 def convert_abs_to_delta_time(midi_list: list[mido.Message]):
     """
     Convert absolute time to delta time [In Place]
@@ -73,6 +82,7 @@ class PnenoSegment:
         self.key.offset -= self.onset  # The sequence's time always starts from 0
         self.key.onset -= self.onset  # ...
         self.sgmt = shift_segment_time(key_onset=self.onset, segment=segment)
+        self.sgmt.sort(key=lambda e: (e.onset, e.pitch))
 
     def copy(self):
         copied_key = copy.deepcopy(self.key)
@@ -124,16 +134,18 @@ class PnenoSegment:
 
 
 class PnenoSeq:
-    def __init__(self, segment_list: list[PnenoSegment] = None, ticks_per_beat=120, tempo=250000):
+    def __init__(self, segment_list: list[PnenoSegment] = None, ticks_per_beat=120, tempo=1000000):
         """
         :param segment_list:
         :param ticks_per_beat:
-        :param tempo:   250,000 for bpm=60
+        :param tempo:   1,000,000 for bpm=60
         """
         if segment_list is None:
             self.seq = []
         else:
             self.seq = segment_list
+            for e in self.seq:
+                e.sort()
         self.tempo = tempo
         self.ticks_per_beat = ticks_per_beat
         self.cursor = 0
@@ -158,7 +170,7 @@ class PnenoSeq:
     def clean(self):
         self.reset_cursor()
         self.seq = []
-        self.tempo = 250_000
+        self.tempo = 1_000_000
 
     def is_end(self):
         return self.cursor == len(self.seq)
@@ -198,7 +210,17 @@ class PnenoSeq:
     def seconds_to_ticks(self, seconds):
         return seconds_to_ticks(seconds=seconds, tempo=self.tempo, ticks_per_beat=self.ticks_per_beat)
 
+    def to_onset_list(self):
+        return [e.onset for e in self.seq]
+
+    def to_pitch_list(self):
+        return [e.key.pitch for e in self.seq]
+
     def to_ioi_list(self):
+        """
+        Obtain IOI for segment keys (omitting the accompaniment)
+        :return:
+        """
         ioi_list = []
         curr_onset = self.seq[0].onset - IOI_PLACEHOLDER
         for e in self.seq:
@@ -281,14 +303,7 @@ def parse_midi_track_tempo(track):
     return tempo
 
 
-def create_pneno_seq_from_midi(midi_path) -> PnenoSeq:
-    """
-    :param midi_path:
-        - one track for the main melody
-        - one track for the aligned notes
-    :return:
-    """
-    midi = mido.MidiFile(midi_path)
+def create_pneno_seq_from_midi(midi: mido.MidiFile):
     if len(midi.tracks) not in [2, 3]:
         raise ValueError("Currently MIDI file must have at least two tracks (melody and accompaniment)")
     track_notes, tempo_changes = extract_pneno_pitches_from_midi(midi)
@@ -305,6 +320,17 @@ def create_pneno_seq_from_midi(midi_path) -> PnenoSeq:
         logger.warn("More than one tempo changes found!")
 
     return create_pneno_seq(melody_track, acc_track, midi.ticks_per_beat, tempo_changes[0].tempo)
+
+
+def create_pneno_seq_from_midi_file(midi_path: str) -> PnenoSeq:
+    """
+    :param midi_path:
+        - one track for the main melody
+        - one track for the aligned notes
+    :return:
+    """
+    midi = mido.MidiFile(midi_path)
+    return create_pneno_seq_from_midi(midi)
 
 
 def create_pneno_seq(melody_track, acc_track, ticks_per_beat, bpm):
@@ -374,7 +400,7 @@ def play_midi_seq(midi_seq, output_port_name, default_vel=80, chnl=0, absolute_t
 
 if __name__ == '__main__':
     print(mido.get_output_names())
-    pneno_seq = create_pneno_seq_from_midi('/Users/kurono/Desktop/pneno_demo.mid')
+    pneno_seq = create_pneno_seq_from_midi_file('/Users/kurono/Desktop/pneno_demo.mid')
     play_midi_seq(pneno_seq.to_midi_seq(use_absolute_time=False), output_port_name=mido.get_output_names()[0])
 
     # for i in range(len(acc)):

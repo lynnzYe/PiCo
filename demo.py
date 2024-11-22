@@ -11,7 +11,7 @@ from pico.mono_pico.util.synthesizer import Fluidx
 from pico.pico import PiCo
 from pico.mono_pico.mono_pico import MonoPiCo
 from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi, DMYSpeedInterpolator
-from pico.pneno.pneno_seq import PnenoSeq, create_pneno_seq_from_midi
+from pico.pneno.pneno_seq import PnenoSeq, create_pneno_seq_from_midi_file
 from pico.pneno.pneno_system import PnenoSystem
 from pico.util.midi_util import choose_midi_input, array_choice
 
@@ -53,7 +53,7 @@ def create_score(mode, score_path=None):
         return pico.mono_pico.music.music_seq.schubert_142_3
     elif mode == 1:
         os.path.exists(score_path)
-        return create_pneno_seq_from_midi(score_path)
+        return create_pneno_seq_from_midi_file(score_path)
 
 
 def start_interactive_session(sf_path, score_path=None, **kwargs):
@@ -120,4 +120,6 @@ if __name__ == '__main__':
 #  1. accept MIDI input and convert to pneno MIDI (separate anchor MIDI events from segments)
 #  2. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),
 #           then calculate IOI ratio deviation to score the performance! It will be a fun game!
-#           (okay. so 17lianqin's automatic accompaniment may also achieve this, but only if no fluctuations...)
+#       - additional feature: rehearsal data, and see where you often miss!
+#  3. Ridardando practice! select a q in [2,3], then craft the IOI to reflect that tempo change!
+

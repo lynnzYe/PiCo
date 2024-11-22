@@ -3,3 +3,4 @@ mido
 pyfluidsynth
 python-rtmidi
 pytest
+matplotlib

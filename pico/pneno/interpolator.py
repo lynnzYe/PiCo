@@ -8,6 +8,8 @@ import pickle
 
 from pico.util.midi_util import seconds_to_ticks
 
+# Because there are no notes before the first pitch, it does not have an IOI. This is a placeholder
+# 1 to prevent zero division, also serves as the scaling factor: 1.0
 IOI_PLACEHOLDER = 1
 
 
@@ -209,7 +211,7 @@ def main():
 
     for e in template_ioi:
         ifp.interpolate(e)
-    print("Simple Scoring! how on-time did you play?")
+    print("Simple Scoring! how on-time did you play? What are your weak spots?")
     print(f'{sum(ifp.user_bpm_history) / len(ifp.user_bpm_history) * 100:.2f}%')
     print('Raw data:', ifp.user_bpm_history)
 

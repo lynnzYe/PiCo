@@ -37,7 +37,29 @@ def ticks_to_seconds(ticks, tempo, ticks_per_beat):
 
 
 def seconds_to_ticks(seconds, tempo, ticks_per_beat):
-    return seconds * (ticks_per_beat * 1_000_000) / tempo
+    return int(round(seconds * (ticks_per_beat * 1_000_000) / tempo))
+
+
+def midi_to_pitch_name(midi: int, all_sharp=True):
+    midi_map = {
+        0: 'C',
+        2: 'D',
+        4: 'E',
+        5: 'F',
+        7: 'G',
+        9: 'A',
+        11: 'B',
+    }
+    assert midi >= 0
+    octave = midi // 12 - 1  # C4 = 60
+    base = midi % 12
+    if base in midi_map.keys():
+        return f"{midi_map[base]}{octave}"
+    # Now determine flat or sharp
+    if all_sharp:
+        return f"{midi_map[base - 1]}#{octave}"
+    else:
+        return f"{midi_map[base + 1]}b{octave}"
 
 
 def pitch_name_to_midi(pname: str):
