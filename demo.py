@@ -3,8 +3,6 @@ import logging
 import os
 import time
 
-from jedi.debug import speed
-
 import pico.mono_pico.music.music_seq
 from pico.logger import logger
 from pico.mono_pico.util.synthesizer import Fluidx

@@ -23,11 +23,11 @@ class PnenoPitch:
         return (f"Note(onset={self.onset}, offset={self.offset}, pitch={self.pitch}, "
                 f"velocity={self.velocity}, channel={self.chnl}, id={self.id})")
 
-    def to_midi_events(self):
-        return [mido.Message(type='note_on', note=self.pitch, channel=self.chnl, velocity=self.velocity,
-                             time=self.onset),
-                mido.Message(type='note_off', note=self.pitch, channel=self.chnl, velocity=0,
-                             time=self.offset)]
+    def to_midi_events(self, chnl=None):
+        return [mido.Message(type='note_on', note=self.pitch, channel=self.chnl if chnl is None else chnl,
+                             velocity=self.velocity, time=self.onset),
+                mido.Message(type='note_off', note=self.pitch, channel=self.chnl if chnl is None else chnl,
+                             velocity=0, time=self.offset)]
 
 
 def convert_onsets_to_ioi(onsets: list[float]):
@@ -93,10 +93,13 @@ class PnenoSegment:
         self.sgmt.sort(key=lambda pno_pitch: (pno_pitch.onset, pno_pitch.pitch))
 
     # def query(key): return False
-    def to_midi_seq(self, use_absolute_time=False, start_from_zero=False, include_key=True):
+    def to_midi_seq(self, use_absolute_time=False, start_from_zero=False, include_key=True, separate_chnl=True):
         """
         Convert list of PnenoNotes to Midi Messages
         :param use_absolute_time:
+        :param start_from_zero:
+        :param include_key:
+        :param separate_chnl:
         :return:
             1.  sequence of sorted mido.Message (by time)
                 - if not use_absolute_time, the first note will start with time = 0.
@@ -106,11 +109,11 @@ class PnenoSegment:
          -
         """
         if include_key:
-            events = self.key.to_midi_events()
+            events = self.key.to_midi_events(chnl=0)
         else:
             events = []
         for e in self.sgmt:
-            events.extend(e.to_midi_events())
+            events.extend(e.to_midi_events(chnl=1 if separate_chnl else 0))
         events.sort(key=lambda event: event.time)
         if not use_absolute_time:
             convert_abs_to_delta_time(events)

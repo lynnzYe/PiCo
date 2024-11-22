@@ -84,3 +84,19 @@ def pitch_name_to_midi(pname: str):
     if acc:
         semitone += 1 if acc == '#' else - 1
     return (12 * (octave + 1)) + semitone
+
+
+def midi_list_to_midi(midi_list: list[mido.Message], ticks_per_beat=480):
+    midi = mido.MidiFile()
+    track = mido.MidiTrack()
+    midi.tracks.append(track)
+    midi.ticks_per_beat = ticks_per_beat
+    for e in midi_list:
+        track.append(e)
+    return midi
+
+
+def note_to_midi(pitch, velocity, onset, offset, channel):
+    mlist = [mido.Message(type='note_on', note=pitch, velocity=velocity, channel=channel, time=onset),
+             mido.Message(type='note_off', note=pitch, velocity=velocity, channel=channel, time=offset)]
+    return mlist

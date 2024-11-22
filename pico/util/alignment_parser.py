@@ -9,12 +9,15 @@ from dataclasses import dataclass, asdict
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import mido
+from jams.eval import tempo
+from sympy.physics.units import velocity
 
 from pico.pneno.interpolator import IOI_PLACEHOLDER
 from pico.pneno.pneno_seq import extract_pneno_pitches_from_midi, create_pneno_seq_from_midi_file, PnenoSeq, \
     create_pneno_seq_from_midi, PnenoPitch, convert_abs_to_delta_time, convert_onsets_to_ioi
 from pico.logger import logger
-from pico.util.midi_util import pitch_name_to_midi, ticks_to_seconds, seconds_to_ticks, midi_to_pitch_name
+from pico.util.midi_util import pitch_name_to_midi, ticks_to_seconds, seconds_to_ticks, midi_to_pitch_name, \
+    midi_list_to_midi, note_to_midi
 
 
 @dataclass
@@ -426,6 +429,52 @@ class MIDIAlignmentParser:
         keys = [e.key.id for e in self.pneno_seq]
         return [self.match_info.score_map[e] for e in keys]
 
+    def to_pneno_midi(self, fpath: str):
+        """
+        Convert performance to MIDI used for PnenoSeq extraction
+        :param fpath:
+        :return:
+        """
+        out_midi = []
+        midi = mido.MidiFile()
+        main = mido.MidiTrack()
+        acc = mido.MidiTrack()
+        midi.tracks.append(main)
+        midi.tracks.append(acc)
+        tempo = 500000  # Default 120 bpm - microseconds per beat
+        ticks_per_beat = midi.ticks_per_beat
+
+        # Create absolute-time based MIDI events, then sort and convert to delta time
+        key_midi_list = []
+        acc_midi_list = []
+
+        for sgmt in self.pneno_seq:
+            key_note = self.match_info.score_map[sgmt.key.id]
+            key_midi_list.extend(
+                note_to_midi(pitch=pitch_name_to_midi(key_note.pitch), velocity=key_note.onset_velocity,
+                             channel=key_note.channel,
+                             onset=seconds_to_ticks(seconds=key_note.onset_time, tempo=tempo,
+                                                    ticks_per_beat=ticks_per_beat),
+                             offset=seconds_to_ticks(seconds=key_note.offset_time, tempo=tempo,
+                                                     ticks_per_beat=ticks_per_beat)))
+            sgmt_notes = [self.match_info.score_map[e.id] for e in sgmt.sgmt]
+            for e in sgmt_notes:
+                acc_midi_list.extend(
+                    note_to_midi(pitch=pitch_name_to_midi(e.pitch), velocity=e.onset_velocity, channel=e.channel,
+                                 onset=seconds_to_ticks(seconds=e.onset_time, tempo=tempo,
+                                                        ticks_per_beat=ticks_per_beat),
+                                 offset=seconds_to_ticks(seconds=e.offset_time, tempo=tempo,
+                                                         ticks_per_beat=ticks_per_beat)))
+        key_midi_list.sort(key=lambda e: (e.time, e.note))
+        acc_midi_list.sort(key=lambda e: (e.time, e.note))
+        convert_abs_to_delta_time(key_midi_list)
+        convert_abs_to_delta_time(acc_midi_list)
+        for e in key_midi_list:
+            main.append(e)
+        for e in acc_midi_list:
+            acc.append(e)
+        midi.save(fpath)
+
 
 def plot_bpm_ratio(bpm_ratio_list, time_list,
                    key_velocity_list=None, sgmt_bpm_ratio_list=None, sgmt_time_list=None, labels=None):
@@ -484,19 +533,21 @@ def ftest_aligner():
                                        score_midi=score_midi,
                                        perf_midi=perf_midi)
 
-    key_ioi_ratio, sgmt_ioi_ratio = align_parser.calculate_performed_pno_ioi_ratio()
-    key_onsets = align_parser.pneno_seq.to_onset_list()
-    key_labels = [midi_to_pitch_name(e, all_sharp=False) for e in align_parser.pneno_seq.to_pitch_list()]
-    key_velocity = [p.onset_velocity for p in align_parser.get_performed_key_notes()]
+    align_parser.to_pneno_midi('/Users/kurono/Desktop/testa.mid')
 
-    key_bpm_ratio = [1 / e for e in key_ioi_ratio]
-    sgmt_bpm_ratio = [[1 / e for e in sgmt] for sgmt in sgmt_ioi_ratio]
-    sgmt_onsets = []
-    for e in align_parser.pneno_seq.seq:
-        sgmt_onsets.append([ost.onset + e.onset for ost in e.sgmt])
-
-    plot_bpm_ratio(bpm_ratio_list=key_bpm_ratio, time_list=key_onsets, key_velocity_list=key_velocity,
-                   labels=key_labels, sgmt_bpm_ratio_list=sgmt_bpm_ratio, sgmt_time_list=sgmt_onsets)
+    # key_ioi_ratio, sgmt_ioi_ratio = align_parser.calculate_performed_pno_ioi_ratio()
+    # key_onsets = align_parser.pneno_seq.to_onset_list()
+    # key_labels = [midi_to_pitch_name(e, all_sharp=False) for e in align_parser.pneno_seq.to_pitch_list()]
+    # key_velocity = [p.onset_velocity for p in align_parser.get_performed_key_notes()]
+    #
+    # key_bpm_ratio = [1 / e for e in key_ioi_ratio]
+    # sgmt_bpm_ratio = [[1 / e for e in sgmt] for sgmt in sgmt_ioi_ratio]
+    # sgmt_onsets = []
+    # for e in align_parser.pneno_seq.seq:
+    #     sgmt_onsets.append([ost.onset + e.onset for ost in e.sgmt])
+    #
+    # plot_bpm_ratio(bpm_ratio_list=key_bpm_ratio, time_list=key_onsets, key_velocity_list=key_velocity,
+    #                labels=key_labels, sgmt_bpm_ratio_list=sgmt_bpm_ratio, sgmt_time_list=sgmt_onsets)
 
 
 if __name__ == '__main__':
