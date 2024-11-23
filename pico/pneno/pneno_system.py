@@ -79,21 +79,24 @@ class PnenoSystem(PiCo):
     seg_binder: PnoSegBinder
 
     def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5,
-                 session_save_path=None, use_velocity_interpolator=True,
+                 session_save_path=None, use_velocity_interpolator=True, pneno_chnl=1,
                  speed_interpolator: SpeedInterpolator = None, velocity_interpolator: VelocityInterpolator = None):
         """
 
         :param input_port_name:
         :param output_port_name:
-        :param pno_seq:   predetermined orderedsequence of PnenoSegments. No async support.
+        :param pno_seq:     predetermined orderedsequence of PnenoSegments. No async support.
         :param history_size:
         :param clean_intv:
-        :param session_save_path:  if provided (save folder), full performance will be saved as a pkl file
+        :param session_save_path:      if provided (save folder), full performance will be saved as a pkl file
+        :param use_velocity_interpolator:
+        :param pneno_chnl:     the MIDI channel to which the key MIDI will be sent
         :param speed_interpolator:
-        :param velocity_interpolator
+        :param velocity_interpolator:
         """
         self.input_port = mido.open_input(input_port_name)
         self.output_port = mido.open_output(output_port_name)
+        self.key_chnl = pneno_chnl
 
         self.speed_interpolator = speed_interpolator if speed_interpolator else DMYSpeedInterpolator()
         self.velocity_interpolator = velocity_interpolator if velocity_interpolator else DMAVelocityInterpolator()
@@ -146,9 +149,12 @@ class PnenoSystem(PiCo):
                     if not self.running_event.is_set():
                         break
                     logger.debug('Received input:', msg)
-                    sgmt = self.get_sgmt(msg)
-                    self.play_sgmt(sgmt, msg)
-                    self.history.append((time.time(), msg, sgmt))
+                    if is_note_on(msg) or is_note_off(msg):
+                        sgmt = self.get_sgmt(msg)
+                        self.play_sgmt(sgmt, msg)
+                        self.history.append((time.time(), msg, sgmt))
+                    else:
+                        self.output_port.send(msg)
                 time.sleep(0.00001)  # Tiny sleep to prevent blocking
 
             except (EOFError, OSError) as e:
@@ -252,8 +258,8 @@ class PnenoSystem(PiCo):
             seg = self.seg_binder.pop_by_midi(midi)
             if seg is None:
                 return  # note-on already terminated by another touch signal
-            key_midi_off = mido.Message(type='note_off', note=seg.key.pitch, channel=0, velocity=midi.velocity,
-                                        time=0)
+            key_midi_off = mido.Message(type='note_off', note=seg.key.pitch, channel=self.key_chnl,
+                                        velocity=midi.velocity, time=0)
             self.output_port.send(key_midi_off)
             self.seg_binder.pop_noteon(seg.key.pitch)
             if not self.seg_binder.noteon_status and self.pno_seq.is_end():
@@ -270,12 +276,13 @@ class PnenoSystem(PiCo):
             elif self.seg_binder.has_noteon(sgmt.key.pitch):
                 key_mid = self.seg_binder.noteon_status[sgmt.key.pitch]
                 self.seg_binder.add_midi_binding(key_mid, None)
-                end_midi = mido.Message(type='note_off', note=sgmt.key.pitch, channel=0, velocity=midi.velocity,
-                                        time=0)
+                end_midi = mido.Message(type='note_off', note=sgmt.key.pitch, channel=self.key_chnl,
+                                        velocity=midi.velocity, time=0)
                 self.output_port.send(end_midi)
 
             self.seg_binder.add_noteon(sgmt.key.pitch, midi)  # always update current noteon with the latest midi
-            key_midi = mido.Message(type='note_on', note=sgmt.key.pitch, channel=0, velocity=midi.velocity, time=0)
+            key_midi = mido.Message(type='note_on', note=sgmt.key.pitch, channel=self.key_chnl,
+                                    velocity=midi.velocity, time=0)
             logger.debug("Sending:", midi)
             self.output_port.send(key_midi)
 

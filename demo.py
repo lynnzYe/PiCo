@@ -62,7 +62,7 @@ def start_interactive_session(sf_path, score_path=None, **kwargs):
     :return:
     """
     assert os.path.exists(sf_path)
-    synthesizer = Fluidx(sf_path)
+    synthesizer = Fluidx(sf_path, listen_chnl=[0, 1])
     time.sleep(0.5)
 
     in_port, out_port = choose_midi_input()
@@ -100,7 +100,7 @@ def debug_main():
     logger.set_level(logging.DEBUG)
     # sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
     sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/piano.sf2'
-    score_path = '/Users/kurono/Desktop/pneno_demo.mid'
+    # score_path = '/Users/kurono/Desktop/pneno_demo.mid'
     score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
     sess_save_path = None
     # sess_save_path = '/Users/kurono/Desktop'
