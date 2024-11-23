@@ -322,7 +322,8 @@ def create_pneno_seq_from_midi(midi: mido.MidiFile):
     if len(tempo_changes) > 1:
         logger.warn("More than one tempo changes found!")
 
-    return create_pneno_seq(melody_track, acc_track, midi.ticks_per_beat, tempo_changes[0].tempo)
+    return create_pneno_seq(melody_track, acc_track, midi.ticks_per_beat,
+                            tempo_changes[0].tempo if tempo_changes else 500000)  # Default 500000
 
 
 def create_pneno_seq_from_midi_file(midi_path: str) -> PnenoSeq:

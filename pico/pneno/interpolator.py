@@ -120,8 +120,8 @@ class IFPSpeedInterpolator(SpeedInterpolator):
         self.pred_bpm_history.append(pred_bpm_ratio)
         self.cursor += 1
         logger.debug("current bpm:", curr_bpm)
-        logger.debug("bpm history:", self.user_bpm_history)
-        logger.debug("predicted bpm:", pred_bpm_ratio)
+        # logger.debug("bpm history:", self.user_bpm_history)
+        # logger.debug("predicted bpm:", pred_bpm_ratio)
         return 1 / pred_bpm_ratio  # Ratio to be multiplied with onsets
 
     def load_score(self, score_ioi_list: list[float]):
