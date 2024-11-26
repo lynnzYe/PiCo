@@ -8,8 +8,8 @@ from pico.logger import logger
 from pico.mono_pico.util.synthesizer import Fluidx
 from pico.pico import PiCo
 from pico.mono_pico.mono_pico import MonoPiCo
-from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi, DMYSpeedInterpolator
-from pico.pneno.pneno_seq import PnenoSeq, create_pneno_seq_from_midi_file
+from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi
+from pico.pneno.pneno_seq import create_pneno_seq_from_midi_file
 from pico.pneno.pneno_system import PnenoSystem
 from pico.util.midi_util import choose_midi_input, array_choice
 
@@ -19,8 +19,8 @@ modes = ['Play a sequence of notes', 'Play a complete score']
 def choose_pico_mode():
     print("\nPlease choose a mode:")
     for i, e in enumerate(modes):
-        print(f"{i}: {e}")
-    return array_choice('', len(modes))
+        print(f"{i + 1}: {e}")
+    return array_choice(1, len(modes), '')
 
 
 def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
@@ -48,19 +48,16 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
 
 def create_score(mode, score_path=None):
     if mode == 0:
-        return pico.mono_pico.music.music_seq.schubert_142_3
+        scores = pico.mono_pico.music.music_seq.scores
+        piece_names = scores.keys()
+        choice = array_choice(0, len(piece_names))
+        return scores[piece_names[choice]]
     elif mode == 1:
         os.path.exists(score_path)
         return create_pneno_seq_from_midi_file(score_path)
 
 
 def start_interactive_session(sf_path, score_path=None, **kwargs):
-    """
-
-    :param sf_path:
-    :param score_path:
-    :return:
-    """
     assert os.path.exists(sf_path)
     synthesizer = Fluidx(sf_path, listen_chnl=[0, 1])
     time.sleep(0.5)
@@ -91,7 +88,9 @@ def main():
                         help="Path to a performance.pkl file as a reference for tempo prediction")
     args = parser.parse_args()
 
-    start_interactive_session(sf_path=args.sf_path, score_path=args.midi_path,
+    logger.set_level(logging.INFO)
+    start_interactive_session(sf_path=args.sf_path,
+                              score_path=args.midi_path,
                               session_save_path=args.sess_save_path,
                               ref_perf=args.ref_perf)
 
@@ -106,18 +105,18 @@ def debug_main():
     sess_save_path = '/Users/kurono/Desktop'
     ref_perf = None
     # ref_perf = '/Users/kurono/Desktop/perf_data.pkl'
-    start_interactive_session(sf_path=sf_path, score_path=score_path, session_save_path=sess_save_path,
+    start_interactive_session(sf_path=sf_path,
+                              score_path=score_path,
+                              session_save_path=sess_save_path,
                               ref_perf=ref_perf)
 
 
 if __name__ == '__main__':
-    logger.set_level(logging.INFO)
-    debug_main()
-    # main()
+    # debug_main()
+    main()
 
 # TODO @Bmois:
-#  1. accept MIDI input and convert to pneno MIDI (separate anchor MIDI events from segments)
-#  2. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),
+#  1. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),
 #           then calculate IOI ratio deviation to score the performance! It will be a fun game!
-#       - additional feature: rehearsal data, and see where you often miss!
-#  3. Ridardando practice! select a q in [2,3], then craft the IOI to reflect that tempo change!
+#       - additional feature: history data, and see where you often miss!
+#  2. Ritardando practice! select a q in [2,3], then craft the IOI to reflect that tempo change!

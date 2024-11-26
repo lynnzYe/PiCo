@@ -31,16 +31,16 @@ def convert_abs_to_delta_time(midi_list: list[mido.Message]):
         curr_time = new_time
 
 
-def array_choice(hint, arr_len):
+def array_choice(arr_begin, arr_end, hint=''):
     while True:
         try:
             in_choice = int(input(hint))
-            if 0 <= in_choice < arr_len:
+            if arr_begin <= in_choice < arr_end:
                 return in_choice
             else:
-                print("Invalid input. Please input a valid number between 0 and ", arr_len - 1)
+                print(f"Invalid input. Please input a valid number between {arr_begin} and {arr_end - 1}")
         except Exception:
-            print("Invalid input. Please input a valid number between 0 and ", arr_len - 1)
+            print(f"Invalid input. Please input a valid number between {arr_begin} and {arr_end - 1}")
 
 
 def choose_midi_input():
@@ -53,12 +53,12 @@ def choose_midi_input():
     print("Please choose an input device")
     for i, e in enumerate(input_list):
         print(i, ': ', e)
-    input_choice = array_choice('', len(input_list))
+    input_choice = array_choice(0, len(input_list), '')
     print("=============================")
     print("Please choose an output device (If you see FluidSynth virtual port, plz choose this one.)")
     for i, e in enumerate(output_list):
         print(i, ': ', e)
-    output_choice = array_choice('', len(output_list))
+    output_choice = array_choice(0, len(output_list), '')
     return [input_list[input_choice], output_list[output_choice]]
 
 

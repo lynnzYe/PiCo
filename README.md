@@ -15,10 +15,41 @@ pip install -e .
 
 You will need a connected MIDI controller for this demo.
 
+There are two modes of demo:
+
+1. Play a sequence of notes
+    - A predetermined sequence of notes will be played as you tap (any MIDI note-on/note-off signals)
+    - You can add new scores by modifying `music_seq.py`
+2. Play a complete score
+    - By tapping a selected proportion of a musical piece, you can "perform" the complete score, where the missing
+      notes are synthesized with velocity and timing inferred from your input.
+
+### Arguments:
+
+- Required:
+    - `sf_path`: you need to provide a sound font path to use this demo. A collection of free SoundFonts can be found
+      from
+      this [link](https://sites.google.com/site/soundfonts4u/).
+      The [Piano Collection-SF4u](https://drive.google.com/file/d/1UpggAFKqgrcjWweZJNAQspuT9zo-hotJ/view) soundfont is
+      recommended.
+- Optional:
+    - `score_path`: This is only used in `Play a complete score` mode. A MIDI file with two tracks is anticipated. The
+      first track should contain the proportion you intend to play.
+    - `session_save_path`: You can provide a path to save your demo session. The performance can be synthesized by
+      calling `perf_file_to_midi` from `midi_util.py`
+    - `ref_perf`: If you want to use your past performance as a hint for the system to predict your tempo, you can
+      provide a path to the session_save_file here.
+
 ```shell
 python pico/demo.py \
-  --sf_path=PATH_TO_SOUNDFONT
-  --score_path=PATH_TO_MIDI_FILE # Only used in Mode 1
+  # Required args
+  --sf_path=PATH_TO_SOUNDFONT \
+  
+  # Optional args
+  --score_path=PATH_TO_MIDI_FILE \  
+  --session_save_path=PATH_TO_SAVE_FILE \  
+  --ref_perf=PATH_TO_REF_FILE
+  
 ```
 
 Press any key on the MIDI device. Your {onset, offset, and velocity} information will be applied to a predetermined note
@@ -114,8 +145,10 @@ https://archives.ismir.net/ismir2019/paper/000112.pdf
 [1] Sageev Oore, Ian Simon, Sander Dieleman, Douglas Eck, and Karen Simonyan. 2020. This time with feeling: Learning
 expressive musical performance. Neural Computing and Applications 32, (2020), 955–967.
 
-[2] Dasaem Jeong, Taegyun Kwon, Yoojin Kim, Kyogu Lee, and Juhan Nam. 2019. VirtuosoNet: A Hierarchical RNN-based System for 
-Modeling Expressive Piano Performance. In International Society for Music Information Retrieval Conference. Retrieved from 
+[2] Dasaem Jeong, Taegyun Kwon, Yoojin Kim, Kyogu Lee, and Juhan Nam. 2019. VirtuosoNet: A Hierarchical RNN-based System
+for
+Modeling Expressive Piano Performance. In International Society for Music Information Retrieval Conference. Retrieved
+from
 https://api.semanticscholar.org/CorpusID:208334424
 
 [3] Akira Maezawa, Kazuhiko Yamamoto, and Takuya Fujishima. 2019. Rendering Music Performance With Interpretation
