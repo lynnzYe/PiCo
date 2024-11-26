@@ -7,7 +7,7 @@ import time
 
 from pico.logger import logger
 from pico.pneno.interpolator import IOI_PLACEHOLDER
-from pico.util.midi_util import ticks_to_seconds, seconds_to_ticks
+from pico.util.midi_util import ticks_to_seconds, seconds_to_ticks, convert_abs_to_delta_time, is_note_on, is_note_off
 
 
 class PnenoPitch:
@@ -37,22 +37,6 @@ def convert_onsets_to_ioi(onsets: list[float]):
         ioi_list.append(e - curr_onset)
         curr_onset = e
     return ioi_list
-
-
-def convert_abs_to_delta_time(midi_list: list[mido.Message]):
-    """
-    Convert absolute time to delta time [In Place]
-
-    :param midi_list:
-    :return:
-    """
-    curr_time = 0
-    midi_list.sort(key=lambda e: e.time)
-    for i in range(len(midi_list)):
-        new_time = midi_list[i].time
-        assert curr_time <= midi_list[i].time
-        midi_list[i].time -= curr_time
-        curr_time = new_time
 
 
 def shift_segment_time(key_onset, segment: list[PnenoPitch]):
@@ -230,14 +214,6 @@ class PnenoSeq:
             ioi_list.append(e.onset - curr_onset)
             curr_onset = e.onset
         return ioi_list
-
-
-def is_note_on(m: mido.Message):
-    return m.type == 'note_on' and m.velocity > 0
-
-
-def is_note_off(m: mido.Message):
-    return m.type == 'note_off' or (m.type == 'note_on' and m.velocity == 0)
 
 
 def extract_pneno_notes_from_track(midi_track: mido.MidiTrack or list[mido.Message]):

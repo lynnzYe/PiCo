@@ -102,8 +102,8 @@ def debug_main():
     sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/piano.sf2'
     # score_path = '/Users/kurono/Desktop/pneno_demo.mid'
     score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
-    sess_save_path = None
-    # sess_save_path = '/Users/kurono/Desktop'
+    # sess_save_path = None
+    sess_save_path = '/Users/kurono/Desktop'
     ref_perf = None
     # ref_perf = '/Users/kurono/Desktop/perf_data.pkl'
     start_interactive_session(sf_path=sf_path, score_path=score_path, session_save_path=sess_save_path,

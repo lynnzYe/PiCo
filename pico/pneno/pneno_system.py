@@ -79,7 +79,7 @@ class PnenoSystem(PiCo):
     seg_binder: PnoSegBinder
 
     def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5,
-                 session_save_path=None, use_velocity_interpolator=True, pneno_chnl=1,
+                 session_save_path=None, use_velocity_interpolator=True, pneno_chnl=1, record_performance=False,
                  speed_interpolator: SpeedInterpolator = None, velocity_interpolator: VelocityInterpolator = None):
         """
 
@@ -97,6 +97,7 @@ class PnenoSystem(PiCo):
         self.input_port = mido.open_input(input_port_name)
         self.output_port = mido.open_output(output_port_name)
         self.key_chnl = pneno_chnl
+        self.record_performance = record_performance
 
         self.speed_interpolator = speed_interpolator if speed_interpolator else DMYSpeedInterpolator()
         self.velocity_interpolator = velocity_interpolator if velocity_interpolator else DMAVelocityInterpolator()
@@ -116,6 +117,7 @@ class PnenoSystem(PiCo):
         self.midi_scheduler = None
         self.capture_thread = None
         self.cleaner = None
+        self.start_time = time.time()
 
         self._stopped = False
         self._prev_time = 0
@@ -136,6 +138,7 @@ class PnenoSystem(PiCo):
             self.capture_thread.start()
             self.midi_scheduler.start()
             self.cleaner.start() if not self.session_save_path else None
+            self.start_time = time.time()
             logger.info("Pneno System started! Press any MIDI key to continue...")
         else:
             logger.warn("PnenoSystem is not listening to you.")
@@ -151,10 +154,12 @@ class PnenoSystem(PiCo):
                     logger.debug('Received input:', msg)
                     if is_note_on(msg) or is_note_off(msg):
                         sgmt = self.get_sgmt(msg)
-                        self.play_sgmt(sgmt, msg)
-                        self.history.append((time.time(), msg, sgmt))
+                        synthesized_midi = self.play_sgmt(sgmt, msg)
+                        self.history.append((time.time(), msg, sgmt, synthesized_midi))
                     else:
                         self.output_port.send(msg)
+                        self.history.append((time.time(), msg, None, None))
+
                 time.sleep(0.00001)  # Tiny sleep to prevent blocking
 
             except (EOFError, OSError) as e:
@@ -181,9 +186,9 @@ class PnenoSystem(PiCo):
         if self.midi_scheduler and self.midi_scheduler.is_alive():
             self.midi_scheduler.join(timeout=1.0)
             if self.midi_scheduler.is_alive():
-                logger.warn("Midi scheduler thread didn't stop gracefully within timeout")
+                logger.warn("MIDI scheduler thread didn't stop gracefully within timeout")
             else:
-                logger.debug("Midi scheduler stopped.")
+                logger.debug("MIDI scheduler stopped.")
             self.midi_scheduler = None
 
         # Now wait for the capture thread to finish
@@ -232,12 +237,12 @@ class PnenoSystem(PiCo):
             e.velocity = default_velocity if default_velocity else e.velocity
         return expressive_seq
 
-    def schedule_midi_seq(self, midi_seq):
+    def schedule_midi_seq(self, midi_seq, channel=0):
         if not self.midi_scheduler.is_alive():
-            logger.warn("Midi scheduler not started!")
+            logger.warn("MIDI scheduler not started!")
             return
         for e in midi_seq:
-            e.channel = 0
+            e.channel = channel
             scheduler.enter(self.pno_seq.ticks_to_seconds(e.time), 1, self.output_port.send, (e,))
 
     def get_sgmt(self, m: mido.Message):
@@ -254,10 +259,10 @@ class PnenoSystem(PiCo):
         return sgmt
 
     def play_sgmt(self, sgmt: PnenoSegment, midi: mido.Message):
-        if sgmt is None and is_note_off(midi):
+        if is_note_off(midi):
             seg = self.seg_binder.pop_by_midi(midi)
             if seg is None:
-                return  # note-on already terminated by another touch signal
+                return None  # note-on already terminated by another touch signal
             key_midi_off = mido.Message(type='note_off', note=seg.key.pitch, channel=self.key_chnl,
                                         velocity=midi.velocity, time=0)
             self.output_port.send(key_midi_off)
@@ -268,11 +273,12 @@ class PnenoSystem(PiCo):
                 # self.listening = False
                 # self.running_event.clear()
                 logger.info("You may now exit by pressing [Enter]")
-        if is_note_on(midi):
+            return None
+        elif is_note_on(midi):
             # Apply input midi velocity to sgmt key
             if sgmt is None:
                 logger.debug("Received empty sgmt with note-on")
-                return
+                return None
             elif self.seg_binder.has_noteon(sgmt.key.pitch):
                 key_mid = self.seg_binder.noteon_status[sgmt.key.pitch]
                 self.seg_binder.add_midi_binding(key_mid, None)
@@ -293,8 +299,12 @@ class PnenoSystem(PiCo):
                 speed_scale_factor=self.speed_interpolator.interpolate(curr_ioi),
                 default_velocity=self.velocity_interpolator.interpolate(
                     midi.velocity) if self.use_velocity_interpolator else None)
-            self.schedule_midi_seq(midi_seq)
             self._prev_time = time.time()
+            self.schedule_midi_seq(midi_seq)
+            return midi_seq
+        else:
+            logger.warn("Unknown type of midi:", midi)
+            return None
 
     def add_note_seq(self, pitch_arr: list[int]):
         logger.info('Appended note list: ', pitch_arr)
@@ -311,6 +321,21 @@ class PnenoSystem(PiCo):
         self.cleaner.start()
 
     def save_performance_data(self):
+        """
+        :return: performance data in the form of dict-
+        {
+            attrs: values
+            performance: ${self.history}
+                            which is a list of tuples:
+                                (
+                                time.time(),
+                                performed msg (input MIDI event),
+                                corresponding PnenoSegment,
+                                synthesized MIDI  # with interpolated time and velocity information
+                                                  # in seconds after the onset of its key
+                                )
+        }
+        """
         if self.session_save_path:
             save_path = f'{self.session_save_path}/perf_data.pkl'
             fname_add = 0
@@ -320,6 +345,8 @@ class PnenoSystem(PiCo):
                 "pred_velocity": repr(self.velocity_interpolator),
                 "pred_speed": repr(self.speed_interpolator),
                 "performance": self.history,
+                'key_chnl': self.key_chnl,
+                'start_time': self.start_time
             }
             if os.path.exists(f'{self.session_save_path}/perf_data.pkl'):
                 logger.warn("Existing performance data exist")
