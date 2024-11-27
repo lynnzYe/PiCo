@@ -2,3 +2,5 @@ music21
 mido
 pyfluidsynth
 python-rtmidi
+pytest
+matplotlib
