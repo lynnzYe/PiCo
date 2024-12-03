@@ -39,7 +39,7 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
         if kwargs.get('ref_perf') is not None:
             score_ioi, tplt_ioi = parse_ifp_performance_ioi(kwargs.get('ref_perf'))
             speed_interpolator.load_template(score_ioi, tplt_ioi)
-        return PnenoSystem(input_port_name=in_port, output_port_name=out_port, use_velocity_interpolator=False,
+        return PnenoSystem(input_port_name=in_port, output_port_name=out_port, use_velocity_interpolator=True,
                            speed_interpolator=speed_interpolator, session_save_path=kwargs.get('session_save_path'))
     else:
         raise Exception(f"Unknown mode: {mode}")
@@ -97,8 +97,8 @@ def debug_main():
     logger.set_level(logging.DEBUG)
     # sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
     sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/piano.sf2'
-    # score_path = '/Users/kurono/Desktop/pneno_demo.mid'
-    score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
+    # score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
+    score_path = '/Users/kurono/Desktop/sutekidane.mid'
     # sess_save_path = None
     sess_save_path = '/Users/kurono/Desktop'
     ref_perf = None
@@ -110,8 +110,8 @@ def debug_main():
 
 
 if __name__ == '__main__':
-    # debug_main()
-    main()
+    debug_main()
+    # main()
 
 # TODO @Bmois:
 #  1. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),

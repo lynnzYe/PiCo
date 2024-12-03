@@ -235,6 +235,7 @@ class PnenoSystem(PiCo):
         for e in expressive_seq:
             e.time *= speed_scale_factor
             e.velocity = default_velocity if default_velocity else e.velocity
+            logger.debug(f"Velocity: {e.velocity}")
         return expressive_seq
 
     def schedule_midi_seq(self, midi_seq, channel=0):

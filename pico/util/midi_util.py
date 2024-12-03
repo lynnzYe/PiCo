@@ -116,10 +116,11 @@ def pitch_name_to_midi(pname: str):
     return (12 * (octave + 1)) + semitone
 
 
-def midi_list_to_midi(midi_list: list[mido.Message], ticks_per_beat=480):
+def midi_list_to_midi(midi_list: list[mido.Message], ticks_per_beat=480, tempo=500_000):
     midi = mido.MidiFile()
     track = mido.MidiTrack()
     midi.tracks.append(track)
+    track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
     midi.ticks_per_beat = ticks_per_beat
     for e in midi_list:
         track.append(e)
@@ -168,20 +169,23 @@ def perf_file_to_midi(perf_file, save_path=None):
                 mid.time = int(mid.time)
             midi_list.extend(e[3])
         else:
-            pitch = midi_noteon_map.pop(midi.note)
-            midi.note = pitch
-            midi_list.append(midi)
+            if is_note_off(midi):
+                pitch = midi_noteon_map.pop(midi.note)
+                midi.note = pitch
+                midi_list.append(midi)
+            else:
+                midi_list.append(midi)
 
     convert_abs_to_delta_time(midi_list)
 
-    midi_file = midi_list_to_midi(midi_list)
+    midi_file = midi_list_to_midi(midi_list, tempo=tempo, ticks_per_beat=ticks_per_beat)
     if save_path:
         midi_file.save(save_path)
     return midi_file
 
 
 def main():
-    perf_file_to_midi('/Users/kurono/Desktop/perf_data.pkl', save_path='/Users/kurono/Desktop/thz.mid')
+    perf_file_to_midi('/Users/kurono/Desktop/perf_data.pkl', save_path='/Users/kurono/Desktop/sdkdn.mid')
 
 
 if __name__ == '__main__':
