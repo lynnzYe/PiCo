@@ -4,3 +4,4 @@ pyfluidsynth
 python-rtmidi
 pytest
 matplotlib
+scipy

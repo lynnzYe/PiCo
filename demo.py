@@ -20,7 +20,7 @@ def choose_pico_mode():
     print("\nPlease choose a mode:")
     for i, e in enumerate(modes):
         print(f"{i + 1}: {e}")
-    return array_choice(1, len(modes), '')
+    return array_choice(1, len(modes) + 1, '')
 
 
 def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
@@ -31,9 +31,9 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
     :param mode:
     :return:
     """
-    if mode == 0:
+    if mode == 1:
         return MonoPiCo(input_port_name=in_port, output_port_name=out_port, **kwargs)
-    elif mode == 1:
+    elif mode == 2:
         # speed_interpolator = DMYSpeedInterpolator()
         speed_interpolator = IFPSpeedInterpolator()
         if kwargs.get('ref_perf') is not None:
@@ -42,17 +42,16 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
         return PnenoSystem(input_port_name=in_port, output_port_name=out_port, use_velocity_interpolator=False,
                            speed_interpolator=speed_interpolator, session_save_path=kwargs.get('session_save_path'))
     else:
-        logger.warn("Unknown mode:", mode)
-    return None
+        raise Exception(f"Unknown mode: {mode}")
 
 
 def create_score(mode, score_path=None):
-    if mode == 0:
+    if mode == 1:
         scores = pico.mono_pico.music.music_seq.scores
         piece_names = scores.keys()
         choice = array_choice(0, len(piece_names))
         return scores[piece_names[choice]]
-    elif mode == 1:
+    elif mode == 2:
         os.path.exists(score_path)
         return create_pneno_seq_from_midi_file(score_path)
 
@@ -76,8 +75,7 @@ def start_interactive_session(sf_path, score_path=None, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Piano Conductor - Proof of Concept Demo, '
-                    'Idea similar to Radio Baton by Max Matthews'
+        description='Piano Conductor - Proof of Concept Demo'
     )
     # Adding arguments
     parser.add_argument('--sf_path', type=str, required=True, help="Path to the sound font")
