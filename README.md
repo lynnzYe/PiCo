@@ -1,6 +1,8 @@
 # Piano Conductor 
 a.k.a. PiCo
 
+Create artful piano performances by tapping. Unleash your creative potential with minimal technical distractions.
+
 ## Installation
 
 ```shell
