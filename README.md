@@ -1,6 +1,5 @@
-# PiCo
-
-AKA: Piano Conductor
+# Piano Conductor 
+a.k.a. PiCo
 
 ## Installation
 
@@ -15,33 +14,24 @@ pip install -e .
 
 You will need these for the demo:
 
-- a connected MIDI controller
-- fluidsynth
+- a connected MIDI device
+- [fluidsynth](https://www.fluidsynth.org/download/)
+- a piano soundfont (The [Piano Collection-SF4u](https://drive.google.com/file/d/1UpggAFKqgrcjWweZJNAQspuT9zo-hotJ/view)
+  soundfont is
+  recommended)
 
-There are two modes of demo:
-
-1. Play a sequence of notes
-    - A predetermined sequence of notes will be played as you tap (any MIDI note-on/note-off signals)
-    - You can add new scores by modifying `music_seq.py`
-2. Play a complete score
-    - By tapping a selected proportion of a musical piece, you can "perform" the complete score, where the missing
-      notes are synthesized with velocity and timing inferred from your input.
-
-### Arguments:
+### Arguments
 
 - Required:
-    - `sf_path`: you need to provide a sound font path to use this demo. A collection of free SoundFonts can be found
-      from
-      this [link](https://sites.google.com/site/soundfonts4u/).
-      The [Piano Collection-SF4u](https://drive.google.com/file/d/1UpggAFKqgrcjWweZJNAQspuT9zo-hotJ/view) soundfont is
-      recommended.
+    - `sf_path`: you need to provide a soundfont path to use this demo.
 - Optional:
-    - `midi_path`: This is only used in `Play a complete score` mode. A MIDI file with two tracks is anticipated. The
-      first track should contain the proportion you intend to play.
-    - `session_save_path`: You can provide a path to save your demo session. The performance can be synthesized by
-      calling `perf_file_to_midi` from `midi_util.py`
-    - `ref_perf`: If you want to use your past performance as a hint for the system to predict your tempo, you can
-      provide a path to the session_save_file here.
+    - `midi_path`: only used in `Mode 2` This is the musical score you want to perform through this system.
+    - `sess_save_path`: provide a path to save the interactive session.
+    - `ref_sess`: provide hints for the system to track your tempo using a past session data.
+    - `interpolate_velocity`: adding this flag will ask the system to interpolate MIDI velocity for the accompaniment
+      part.
+
+### Example
 
 ```shell
 python demo.py \
@@ -51,11 +41,35 @@ python demo.py \
   # Optional args
   --midi_path=PATH_TO_MIDI_FILE \  
   --sess_save_path=PATH_TO_SAVE_FILE \  
-  --ref_perf=PATH_TO_REF_FILE
+  --ref_sess=PATH_TO_REF_FILE \
+  --interpolate_velocity  #
   
 ```
 
-### Common Problems:
+### Example Session
+
+```text
+=============================
+Please choose an input device
+0 :  Roland Digital Piano
+> 0
+=============================
+Please choose an output device (If you see FluidSynth virtual port, plz choose this one.)
+0 :  Roland Digital Piano
+1 :  FluidSynth virtual port (81308)
+> 1
+
+Please choose a mode:
+1: Play a sequence of notes
+2: Play a complete score
+> 2
+
+Press [Enter] to stop
+[Info] Pneno System started! Press any MIDI key to continue...
+
+```
+
+### Common Problems
 
 "Couldn't find the FluidSynth library"
 
@@ -66,11 +80,34 @@ python demo.py \
 
 ---
 
-Press any key on the MIDI device. Your {onset, offset, and velocity} information will be applied to a predetermined note
+## More Information
+
+### How to Interact?
+
+Press any key on the MIDI device. Your {onset, offset, velocity} information will be applied to a predetermined note
 sequence one by one, synthesized using the provided soundfont.
 
-It is a proof of concept for Piano Conductor -> reconstruct a complete expressive performance from timing and dynamic
-information only, so that you can artfully play the piano anytime anywhere.
+Pressing a certain pitch won't do any help. Only the note-on/note-off signal is useful. Therefore, it can be extended to
+other interfaces, such as a pressure-sensitive desk/glove.
+
+It is a proof of concept for Piano Conductor—reconstruct a complete expressive performance from timing and dynamic
+information only, so that you can artfully play the piano anytime anywhere without significant practice
+
+### About Different Modes of Interaction
+
+This demo contains two modes of interation:
+
+1. Play a sequence of notes
+    - A predetermined sequence of notes will be played as you tap (any MIDI note-on/note-off signals)
+    - You can add new scores by modifying `music_seq.py`
+2. Play a complete score **[New]**
+    - "Perform" the complete score by tapping a part of the score (e.g. melody line). The missing
+      notes are synthesized with velocity and timing inferred from your input.
+
+### About saving your interactive session
+
+You can provide a `--sess_save_path` to save your demo session. After obtaining the `perf_data.pkl` file, The
+performance can be synthesized by calling `perf_file_to_midi(...)` from `midi_util.py`
 
 ## Background
 
@@ -147,7 +184,8 @@ Can technology and machine learning serve as wings for human imagination and exp
 
 ## Notice:
 
-I am looking for collaborators! If you are interested, please reach out to me!
+I am looking for collaborators! If you are interested, please reach out to me! Contact information can be found on my
+[personal website](https://lynnzye.github.io).
 
 # Reference
 

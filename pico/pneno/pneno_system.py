@@ -79,7 +79,7 @@ class PnenoSystem(PiCo):
     seg_binder: PnoSegBinder
 
     def __init__(self, input_port_name, output_port_name, pno_seq=None, history_size=1500, clean_intv=5,
-                 session_save_path=None, use_velocity_interpolator=True, pneno_chnl=1, record_performance=False,
+                 session_save_path=None, pneno_chnl=1,
                  speed_interpolator: SpeedInterpolator = None, velocity_interpolator: VelocityInterpolator = None):
         """
 
@@ -89,7 +89,6 @@ class PnenoSystem(PiCo):
         :param history_size:
         :param clean_intv:
         :param session_save_path:      if provided (save folder), full performance will be saved as a pkl file
-        :param use_velocity_interpolator:
         :param pneno_chnl:     the MIDI channel to which the key MIDI will be sent
         :param speed_interpolator:
         :param velocity_interpolator:
@@ -97,11 +96,9 @@ class PnenoSystem(PiCo):
         self.input_port = mido.open_input(input_port_name)
         self.output_port = mido.open_output(output_port_name)
         self.key_chnl = pneno_chnl
-        self.record_performance = record_performance
 
         self.speed_interpolator = speed_interpolator if speed_interpolator else DMYSpeedInterpolator()
-        self.velocity_interpolator = velocity_interpolator if velocity_interpolator else DMAVelocityInterpolator()
-        self.use_velocity_interpolator = use_velocity_interpolator
+        self.velocity_interpolator = velocity_interpolator
 
         if pno_seq is None:
             self.pno_seq = PnenoSeq()
@@ -235,7 +232,7 @@ class PnenoSystem(PiCo):
         for e in expressive_seq:
             e.time *= speed_scale_factor
             e.velocity = default_velocity if default_velocity else e.velocity
-            logger.debug(f"Velocity: {e.velocity}")
+            # logger.debug(f"Velocity: {e.velocity}")
         return expressive_seq
 
     def schedule_midi_seq(self, midi_seq, channel=0):
@@ -299,7 +296,7 @@ class PnenoSystem(PiCo):
                 sgmt.to_midi_seq(use_absolute_time=True, include_key=False, start_from_zero=True),
                 speed_scale_factor=self.speed_interpolator.interpolate(curr_ioi),
                 default_velocity=self.velocity_interpolator.interpolate(
-                    midi.velocity) if self.use_velocity_interpolator else None)
+                    midi.velocity) if self.velocity_interpolator else None)
             self._prev_time = time.time()
             self.schedule_midi_seq(midi_seq)
             return midi_seq
