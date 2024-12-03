@@ -193,7 +193,7 @@ class VelocityInterpolator:
 class DMAVelocityInterpolator(VelocityInterpolator):
     """Decaying Moving Average Interpolator"""
 
-    def __init__(self, alpha=0.5, decay=0.8):
+    def __init__(self, alpha=0.3, decay=0.8):
         self.alpha = alpha
         self.decay = decay
         self._past_vel = None
@@ -206,13 +206,12 @@ class DMAVelocityInterpolator(VelocityInterpolator):
             self._past_vel = curr_vel * self.decay
             return int(self._past_vel)
         else:
-            max_ret = self.decay * curr_vel
-            return int(
-                min(
-                    self.alpha * self.decay * self._past_vel + (1 - self.alpha) * min(max_ret, self._past_vel),
-                    max_ret
-                )
-            )
+            max_ret = int(self.decay * curr_vel)
+            ret = int(self.alpha * self.decay * self._past_vel
+                      + (1 - self.alpha) * max_ret)
+            ret = min(max_ret, ret)
+            self._past_vel = ret
+            return ret
 
 
 def main():

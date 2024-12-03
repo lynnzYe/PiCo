@@ -8,7 +8,7 @@ from pico.logger import logger
 from pico.mono_pico.util.synthesizer import Fluidx
 from pico.pico import PiCo
 from pico.mono_pico.mono_pico import MonoPiCo
-from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi
+from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi, DMAVelocityInterpolator
 from pico.pneno.pneno_seq import create_pneno_seq_from_midi_file
 from pico.pneno.pneno_system import PnenoSystem
 from pico.util.midi_util import choose_midi_input, array_choice
@@ -32,14 +32,18 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
     :return:
     """
     if mode == 1:
-        return MonoPiCo(input_port_name=in_port, output_port_name=out_port, **kwargs)
+        return MonoPiCo(input_port_name=in_port, output_port_name=out_port)
     elif mode == 2:
         # speed_interpolator = DMYSpeedInterpolator()
         speed_interpolator = IFPSpeedInterpolator()
-        if kwargs.get('ref_perf') is not None:
-            score_ioi, tplt_ioi = parse_ifp_performance_ioi(kwargs.get('ref_perf'))
+        if kwargs.get('ref_sess') is not None:
+            score_ioi, tplt_ioi = parse_ifp_performance_ioi(kwargs.get('ref_sess'))
             speed_interpolator.load_template(score_ioi, tplt_ioi)
-        return PnenoSystem(input_port_name=in_port, output_port_name=out_port, use_velocity_interpolator=False,
+        if kwargs.get('interpolate_velocity'):
+            vel_interpolator = DMAVelocityInterpolator()
+        else:
+            vel_interpolator = None
+        return PnenoSystem(input_port_name=in_port, output_port_name=out_port, velocity_interpolator=vel_interpolator,
                            speed_interpolator=speed_interpolator, session_save_path=kwargs.get('session_save_path'))
     else:
         raise Exception(f"Unknown mode: {mode}")
@@ -82,7 +86,9 @@ def main():
     parser.add_argument('--midi_path', type=str, required=False, help="Path to a MIDI file")
     parser.add_argument('--sess_save_path', type=str, required=False,
                         help='If provided, performance will be saved at the given path')
-    parser.add_argument('--ref_perf', type=str, required=False,
+    parser.add_argument('--ref_sess', type=str, required=False,
+                        help="Path to a performance.pkl file as a reference for tempo prediction")
+    parser.add_argument('--interpolate_velocity', action='store_true', required=False,
                         help="Path to a performance.pkl file as a reference for tempo prediction")
     args = parser.parse_args()
 
@@ -90,28 +96,30 @@ def main():
     start_interactive_session(sf_path=args.sf_path,
                               score_path=args.midi_path,
                               session_save_path=args.sess_save_path,
-                              ref_perf=args.ref_perf)
+                              ref_sess=args.ref_sess,
+                              interpolate_velocity=args.interpolate_velocity)
 
 
 def debug_main():
     logger.set_level(logging.DEBUG)
     # sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
     sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/piano.sf2'
-    # score_path = '/Users/kurono/Desktop/pneno_demo.mid'
-    score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
-    # sess_save_path = None
-    sess_save_path = '/Users/kurono/Desktop'
-    ref_perf = None
-    # ref_perf = '/Users/kurono/Desktop/perf_data.pkl'
+    # score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
+    score_path = '/Users/kurono/Desktop/sutekidane.mid'
+    sess_save_path = None
+    # sess_save_path = '/Users/kurono/Desktop'
+    ref_sess = None
+    # ref_sess = '/Users/kurono/Desktop/perf_data.pkl'
     start_interactive_session(sf_path=sf_path,
                               score_path=score_path,
                               session_save_path=sess_save_path,
-                              ref_perf=ref_perf)
+                              ref_sess=ref_sess,
+                              interpolate_velocity=True)
 
 
 if __name__ == '__main__':
-    # debug_main()
-    main()
+    debug_main()
+    # main()
 
 # TODO @Bmois:
 #  1. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),

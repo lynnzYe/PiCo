@@ -121,7 +121,7 @@ class PnenoSegment:
 
 
 class PnenoSeq:
-    def __init__(self, segment_list: list[PnenoSegment] = None, ticks_per_beat=120, tempo=1000000):
+    def __init__(self, segment_list: list[PnenoSegment] = None, ticks_per_beat=120, tempo=500_000):
         """
         :param segment_list:
         :param ticks_per_beat:
@@ -157,7 +157,7 @@ class PnenoSeq:
     def clean(self):
         self.reset_cursor()
         self.seq = []
-        self.tempo = 1_000_000
+        self.tempo = 500_000
 
     def is_end(self):
         return self.cursor == len(self.seq)
