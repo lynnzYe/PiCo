@@ -13,7 +13,10 @@ pip install -e .
 
 ## Proof-of-Concept Interactive Demo
 
-You will need a connected MIDI controller for this demo.
+You will need these for the demo:
+
+- a connected MIDI controller
+- fluidsynth
 
 There are two modes of demo:
 
@@ -33,7 +36,7 @@ There are two modes of demo:
       The [Piano Collection-SF4u](https://drive.google.com/file/d/1UpggAFKqgrcjWweZJNAQspuT9zo-hotJ/view) soundfont is
       recommended.
 - Optional:
-    - `score_path`: This is only used in `Play a complete score` mode. A MIDI file with two tracks is anticipated. The
+    - `midi_path`: This is only used in `Play a complete score` mode. A MIDI file with two tracks is anticipated. The
       first track should contain the proportion you intend to play.
     - `session_save_path`: You can provide a path to save your demo session. The performance can be synthesized by
       calling `perf_file_to_midi` from `midi_util.py`
@@ -41,25 +44,33 @@ There are two modes of demo:
       provide a path to the session_save_file here.
 
 ```shell
-python pico/demo.py \
+python demo.py \
   # Required args
   --sf_path=PATH_TO_SOUNDFONT \
   
   # Optional args
-  --score_path=PATH_TO_MIDI_FILE \  
-  --session_save_path=PATH_TO_SAVE_FILE \  
+  --midi_path=PATH_TO_MIDI_FILE \  
+  --sess_save_path=PATH_TO_SAVE_FILE \  
   --ref_perf=PATH_TO_REF_FILE
   
 ```
+
+### Common Problems:
+
+"Couldn't find the FluidSynth library"
+
+- Please refer to this
+  stackoverflow [link](https://stackoverflow.com/questions/62478717/importerrorcouldnt-find-the-fluidsynth-library)
+  for more information
+- For MacOS users: You may need to append it to DYLD_LIBRARY_PATH
+
+---
 
 Press any key on the MIDI device. Your {onset, offset, and velocity} information will be applied to a predetermined note
 sequence one by one, synthesized using the provided soundfont.
 
 It is a proof of concept for Piano Conductor -> reconstruct a complete expressive performance from timing and dynamic
 information only, so that you can artfully play the piano anytime anywhere.
-
-The idea is similar to Max Matthews's sequential drum / radio baton, except that you can now play the notes on a
-MIDI keyboard to achieve more fine-grained control over the timing and dynamic.
 
 ## Background
 
