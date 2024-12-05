@@ -158,22 +158,29 @@ Modeling expressiveness in piano performance is a topic that has received growin
 [[6]](https://archives.ismir.net/ismir2023/paper/000069.pdf)
 [[7]](https://arxiv.org/pdf/2406.14850)
 
-Interestingly, however, most research in the area of controllable expressive performance generation has used "mid-level
+However, most research in the area of controllable expressive performance generation has used "mid-level
 perceptual features"[6] (articulation, performance style, dynamic) as input, rather than directly conditioning on
-incomplete performances created by humans. There are several reasons for investigating conditioning on incomplete human
-performances. First, it "permits" users to directly control the timing, articulation, pitch, and timbre of individual
-notes in the performance, allowing for much more intimacy and fine-grained control. This level of intimacy and control
-is essential for building real-time piano conducting systems with minimal loss in artistic control and a sense of
-ownership/autonomy. Additionally, by closely conditioning on the users' performance, deep learning models may better
-understand what the user wants, as it is difficult to accurately describe one's expressive intentions without
-demonstrating them on the keyboard. Thirdly, evidences shows that this approach is highly feasible. For example,
-pianists often utilize common performance strategies, such as shaping according to the main melody line and lowering the
-volume of accompanying passages. Signs of success have been demonstrated in the
-[Masked Expressiveness](https://github.com/bmoist/maskedExpressiveness/) project. By learning the strategies, deep
-learning models have the potential to make educated guesses about the user's expressive intentions, although it could
-still benefit from incorporating additional information, such as rehearsal data and other mid-level perceptual features.
-Moreover, once the model has learned these common patterns in performance, it may also help us understand how pianists
-organize and realize their expressive intentions.
+incomplete performances created by humans. There are several reasons for conditioning predictions on incomplete human
+performances. 
+
+First, this approach can seamlessly interleave user performances with predicted performance to support fine-grained 
+control and promote a stronger sense of ownership. I believe these are crucial for a real-time piano conducting system to 
+help users enjoy performance without sacrifising artistry and intimacy.
+
+Additionally, by closely conditioning on the users' performance, deep learning models may better understand what the user 
+wants, as it is quite difficult, as least to my experience as a pianist, to accurately describe one's expressive intentions
+without demonstrating them on the keyboard. 
+
+Thirdly, evidence supports the feasibility of this approach. Pianists often employ well-established performance strategies, 
+such as voicing the main melody line while softening accompanying passages. These conventions present a promising opportunity
+for machine learning models to learn and replicate expressive nuances. My previous project, 
+[Masked Expressiveness](https://github.com/bmoist/maskedExpressiveness/), has already demonstrated encouraing progress in this
+area, showcasing the potential for further advancements.
+
+By learning the conventions, deep learning models can make educated guesses about the user's expressive intentions and generate
+performances that align with one's expectation. These models could then be further enhanced by integrating additional information,
+such as rehearsal data, performance style, and other relevant features, enabling even more nuanced and personalized expressive
+outputs.
 
 ---
 
