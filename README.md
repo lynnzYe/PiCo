@@ -114,11 +114,11 @@ performance can be synthesized by calling `perf_file_to_midi(...)` from `midi_ut
 ## Background
 
 The ideas of "air instruments" (e.g. air guitar) and conducting systems are not new. Many projects have explored this
-idea, such as _Guitar Hero, Piano Genie, Radio Baton_, and others.
+idea, such as _[Radio Baton](https://ccrma.stanford.edu/radiobaton/), [Guitar Hero](https://en.wikipedia.org/wiki/Guitar_Hero),
+[iFP](https://www.cs.tufts.edu/~jacob/250aui/ifp-performance-template.pdf), [Piano Genie](https://imaginary.github.io/piano-genie/), [Virtual Conductor](https://www.youtube.com/watch?v=fEXOWFmA8KA&t=2s&ab_channel=HausderMusik)_, and many others.
 
-I want to take this further and create an "air piano". I envision a future where the technical challenges of piano
-playing becomes less of a barrier for both amateurs and professionals to express their interpretations of musical
-compositions.
+I want to take this further and create an "air piano", where an intelligent system helps pianists of all skill levels
+express their interpretations of musical compositions. 
 
 As early as in the 1970s, Max Matthews came up with the idea of "radio baton". Since the pitch information is explicitly
 encoded in most musical scores, one can ask computers to memorize it, leaving the performer to focus on controlling the
