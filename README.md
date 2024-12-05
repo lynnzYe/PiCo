@@ -191,8 +191,6 @@ I am looking for collaborators! If you are interested, please reach out to me! C
 
 # Reference
 
-https://archives.ismir.net/ismir2019/paper/000112.pdf
-
 [1] Sageev Oore, Ian Simon, Sander Dieleman, Douglas Eck, and Karen Simonyan. 2020. This time with feeling: Learning
 expressive musical performance. Neural Computing and Applications 32, (2020), 955–967.
 
