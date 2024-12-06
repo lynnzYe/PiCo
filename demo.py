@@ -118,8 +118,8 @@ def debug_main():
 
 
 if __name__ == '__main__':
-    debug_main()
-    # main()
+    # debug_main()
+    main()
 
 # TODO @Bmois:
 #  1. Rhythm game: play piano conductor with exact same speed (DmyVelocityInterpolator),
