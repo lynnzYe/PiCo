@@ -2,6 +2,9 @@ import argparse
 import logging
 import os
 import time
+from pico.util.midi_util import choose_midi_input, array_choice, check_fluidsynth_library
+check_fluidsynth_library()
+
 
 import pico.mono_pico.music.music_seq
 from pico.logger import logger
@@ -11,7 +14,6 @@ from pico.mono_pico.mono_pico import MonoPiCo
 from pico.pneno.interpolator import IFPSpeedInterpolator, parse_ifp_performance_ioi, DMAVelocityInterpolator
 from pico.pneno.pneno_seq import create_pneno_seq_from_midi_file
 from pico.pneno.pneno_system import PnenoSystem
-from pico.util.midi_util import choose_midi_input, array_choice
 
 modes = ['Play a sequence of notes', 'Play a complete score']
 
@@ -49,18 +51,18 @@ def create_pico_system(in_port, out_port, mode, **kwargs) -> PiCo or None:
         raise Exception(f"Unknown mode: {mode}")
 
 
-def create_score(mode, score_path=None):
+def create_score(mode, midi_path=None):
     if mode == 1:
         scores = pico.mono_pico.music.music_seq.scores
         piece_names = scores.keys()
         choice = array_choice(0, len(piece_names))
         return scores[piece_names[choice]]
     elif mode == 2:
-        os.path.exists(score_path)
-        return create_pneno_seq_from_midi_file(score_path)
+        os.path.exists(midi_path)
+        return create_pneno_seq_from_midi_file(midi_path)
 
 
-def start_interactive_session(sf_path, score_path=None, **kwargs):
+def start_interactive_session(sf_path, midi_path=None, **kwargs):
     assert os.path.exists(sf_path)
     synthesizer = Fluidx(sf_path, listen_chnl=[0, 1])
     time.sleep(0.5)
@@ -68,7 +70,7 @@ def start_interactive_session(sf_path, score_path=None, **kwargs):
     in_port, out_port = choose_midi_input()
     mode = choose_pico_mode()
     pico_system = create_pico_system(in_port=in_port, out_port=out_port, mode=mode, **kwargs)
-    score = create_score(mode, score_path)
+    score = create_score(mode, midi_path)
     pico_system.load_score(score)
     pico_system.start_realtime_capture()
 
@@ -94,7 +96,7 @@ def main():
 
     logger.set_level(logging.INFO)
     start_interactive_session(sf_path=args.sf_path,
-                              score_path=args.midi_path,
+                              midi_path=args.midi_path,
                               session_save_path=args.sess_save_path,
                               ref_sess=args.ref_sess,
                               interpolate_velocity=args.interpolate_velocity)
@@ -104,14 +106,15 @@ def debug_main():
     logger.set_level(logging.DEBUG)
     # sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/kss.sf2'
     sf_path = '/Users/kurono/Documents/github/PiCo/pico/data/piano.sf2'
-    # score_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
-    score_path = '/Users/kurono/Desktop/sutekidane.mid'
+    # midi_path = '/Users/kurono/Desktop/pneno_hrwz.mid'
+    # midi_path = '/Users/kurono/Desktop/sutekidane.mid'
+    midi_path = '/Users/kurono/Desktop/pico_scores/xmm-easy.mid'
     sess_save_path = None
     # sess_save_path = '/Users/kurono/Desktop'
     ref_sess = None
     # ref_sess = '/Users/kurono/Desktop/perf_data.pkl'
     start_interactive_session(sf_path=sf_path,
-                              score_path=score_path,
+                              midi_path=midi_path,
                               session_save_path=sess_save_path,
                               ref_sess=ref_sess,
                               interpolate_velocity=True)
